@@ -193,6 +193,18 @@
     "tailor": "درزی",
     "cashier": "کیشیئر"
   },
+  "invite": {
+    "subtitle": "اپنا اکاؤنٹ فعال کرنے کے لیے پاس ورڈ مقرر کریں",
+    "choosePassword": "پاس ورڈ منتخب کریں",
+    "confirmPassword": "پاس ورڈ کی تصدیق کریں",
+    "passwordRule": "کم از کم 8 حروف",
+    "passwordMismatch": "پاس ورڈ مماثل نہیں",
+    "accept": "دعوت قبول کریں",
+    "successTitle": "اکاؤنٹ فعال ہو گیا",
+    "successBody": "اب آپ اپنے ای میل اور نئے پاس ورڈ سے سائن ان کر سکتے ہیں۔",
+    "invalidTitle": "دعوت کا لنک غلط ہے",
+    "invalidBody": "اس لنک میں ٹوکن موجود نہیں۔ منتظم سے دعوت دوبارہ بھیجنے کو کہیں۔"
+  },
   "apptStatus": {
     "scheduled": "شیڈول شدہ",
     "confirmed": "تصدیق شدہ",

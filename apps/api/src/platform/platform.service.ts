@@ -215,6 +215,8 @@ export class PlatformService {
         monthlyPrice: dto.monthlyPrice,
         yearlyPrice: dto.yearlyPrice,
         isPublic: dto.isPublic ?? true,
+        stripeMonthlyPriceId: dto.stripeMonthlyPriceId,
+        stripeYearlyPriceId: dto.stripeYearlyPriceId,
       },
       create: {
         name: dto.name,
@@ -225,6 +227,8 @@ export class PlatformService {
         monthlyPrice: dto.monthlyPrice,
         yearlyPrice: dto.yearlyPrice,
         isPublic: dto.isPublic ?? true,
+        stripeMonthlyPriceId: dto.stripeMonthlyPriceId,
+        stripeYearlyPriceId: dto.stripeYearlyPriceId,
       },
     });
     await this.audit.log({

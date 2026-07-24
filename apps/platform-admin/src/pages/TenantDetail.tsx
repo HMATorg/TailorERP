@@ -38,6 +38,8 @@ export default function TenantDetail() {
   const [org, setOrg] = useState<OrgDetail | null>(null);
   const [plans, setPlans] = useState<{ id: string; code: string; name: string }[]>([]);
   const [planOpen, setPlanOpen] = useState(false);
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [portalLoading, setPortalLoading] = useState(false);
   const canImpersonate = ['super_admin', 'support'].includes(user?.adminLevel ?? '');
   const isSuperAdmin = user?.adminLevel === 'super_admin';
 
@@ -64,6 +66,19 @@ export default function TenantDetail() {
       await load();
     } catch (e) {
       message.error(errMsg(e));
+    }
+  };
+
+  /** Opens the Stripe-hosted billing portal in a new tab. */
+  const openPortal = async () => {
+    setPortalLoading(true);
+    try {
+      const { data } = await api.post(`/admin/billing/organizations/${org.id}/portal`);
+      window.open(data.url, '_blank', 'noopener');
+    } catch (e) {
+      message.error(errMsg(e));
+    } finally {
+      setPortalLoading(false);
     }
   };
 
@@ -127,9 +142,17 @@ export default function TenantDetail() {
         title="Subscription"
         size="small"
         extra={
-          <Button size="small" type="primary" onClick={() => setPlanOpen(true)}>
-            Change plan
-          </Button>
+          <Space>
+            <Button size="small" onClick={() => setCheckoutOpen(true)}>
+              Start paid subscription
+            </Button>
+            <Button size="small" onClick={() => void openPortal()} loading={portalLoading}>
+              Billing portal
+            </Button>
+            <Button size="small" type="primary" onClick={() => setPlanOpen(true)}>
+              Change plan
+            </Button>
+          </Space>
         }
       >
         {org.subscription ? (
@@ -164,6 +187,50 @@ export default function TenantDetail() {
           ]}
         />
       </Card>
+
+      <Modal
+        open={checkoutOpen}
+        title="Start paid subscription"
+        onCancel={() => setCheckoutOpen(false)}
+        footer={null}
+        destroyOnHidden
+      >
+        <Typography.Paragraph type="secondary">
+          Creates a Stripe Checkout session. The link opens in a new tab — send it to the
+          tenant, or complete it with them on a call.
+        </Typography.Paragraph>
+        <Form
+          layout="vertical"
+          initialValues={{ interval: 'monthly', planCode: org.subscription?.plan.code }}
+          onFinish={async (v) => {
+            try {
+              const { data } = await api.post(
+                `/admin/billing/organizations/${org.id}/checkout`,
+                v,
+              );
+              window.open(data.url, '_blank', 'noopener');
+              setCheckoutOpen(false);
+            } catch (e) {
+              message.error(errMsg(e));
+            }
+          }}
+        >
+          <Form.Item name="planCode" label="Plan" rules={[{ required: true }]}>
+            <Select options={plans.map((p) => ({ value: p.code, label: p.name }))} />
+          </Form.Item>
+          <Form.Item name="interval" label="Billing interval" rules={[{ required: true }]}>
+            <Select
+              options={[
+                { value: 'monthly', label: 'Monthly' },
+                { value: 'yearly', label: 'Yearly' },
+              ]}
+            />
+          </Form.Item>
+          <Button type="primary" htmlType="submit" block>
+            Create checkout link
+          </Button>
+        </Form>
+      </Modal>
 
       <Modal open={planOpen} title="Change plan" onCancel={() => setPlanOpen(false)} footer={null} destroyOnHidden>
         <Form

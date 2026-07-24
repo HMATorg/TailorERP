@@ -193,6 +193,18 @@
     "tailor": "Tailor",
     "cashier": "Cashier"
   },
+  "invite": {
+    "subtitle": "Set a password to activate your account",
+    "choosePassword": "Choose a password",
+    "confirmPassword": "Confirm password",
+    "passwordRule": "At least 8 characters",
+    "passwordMismatch": "Passwords do not match",
+    "accept": "Accept invitation",
+    "successTitle": "Account activated",
+    "successBody": "You can now sign in with your email and new password.",
+    "invalidTitle": "Invitation link is invalid",
+    "invalidBody": "This link is missing its token. Ask your administrator to resend the invitation."
+  },
   "apptStatus": {
     "scheduled": "Scheduled",
     "confirmed": "Confirmed",

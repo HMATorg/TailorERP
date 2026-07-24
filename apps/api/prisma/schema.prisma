@@ -129,6 +129,7 @@ model Organization {
   defaultCurrency String    @default("SAR") @map("default_currency") @db.VarChar(10)
   timezone        String    @default("Asia/Riyadh") @db.VarChar(50)
   status          OrgStatus @default(active)
+  stripeCustomerId String?  @unique @map("stripe_customer_id") @db.VarChar(255)
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at")
 
@@ -701,6 +702,9 @@ model SubscriptionPlan {
   monthlyPrice Decimal? @map("monthly_price") @db.Decimal(10, 2)
   yearlyPrice  Decimal? @map("yearly_price") @db.Decimal(10, 2)
   isPublic     Boolean  @default(true) @map("is_public")
+  /// Stripe Price IDs — the plan is only purchasable once these are set.
+  stripeMonthlyPriceId String? @map("stripe_monthly_price_id") @db.VarChar(255)
+  stripeYearlyPriceId  String? @map("stripe_yearly_price_id") @db.VarChar(255)
   createdAt    DateTime @default(now()) @map("created_at")
 
   subscriptions OrganizationSubscription[]

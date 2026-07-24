@@ -168,6 +168,40 @@ npm workspaces (no pnpm dependency on dev machines). Node 24, TypeScript 5 stric
   network-first for `/api/`) and adds push handling that focuses an already-open tab
   before opening a new window.
 
+## D-018: Stripe is the source of truth for subscription state
+
+- **Decision:** `organization_subscriptions` is a **projection** of Stripe, not a
+  parallel ledger. Webhooks (`customer.subscription.*`, `invoice.paid`,
+  `invoice.payment_failed`) upsert our row; the platform admin's manual "change plan"
+  action remains for enterprise deals billed outside Stripe.
+- **Mapping:** Stripe status → ours: `trialing`→`trialing`, `active`→`active`,
+  `past_due`/`unpaid`→`past_due`, `canceled`/`incomplete_expired`→`cancelled`,
+  everything else→`suspended`. Every sync invalidates the Redis feature cache so
+  entitlements follow payment immediately rather than after the 5-minute TTL.
+- **Tenant linkage:** `organizationId` is written into subscription metadata at
+  checkout. A webhook without it is logged and ignored — we never guess which tenant
+  a payment belongs to.
+
+## D-019: Stripe SDK v22 field relocations
+
+- **Gotcha hit during implementation:** the installed SDK pins API `2026-06-24.dahlia`,
+  which moved two fields the older integration guides still reference:
+  - `invoice.subscription` → **`invoice.parent.subscription_details.subscription`**
+  - `subscription.current_period_start/end` → **on the subscription *item***
+    (`subscription.items.data[0].current_period_*`)
+- **Decision:** Do not pin `apiVersion` in the constructor. The SDK's default matches
+  its own typings; pinning an older string compiles only with `as any` casts and would
+  silently drift from the types.
+- A subscription arriving without a resolvable billing period is skipped and logged
+  rather than written with a fabricated date.
+
+## D-020: Billing degrades, it does not crash
+
+- Without `STRIPE_SECRET_KEY` the billing endpoints return **503** and the rest of the
+  platform runs untouched. This keeps local dev, CI, and self-hosted deployments that
+  do not use Stripe fully functional. Webhooks without a valid signature are rejected
+  **400 before any parsing** — the signature is the only authentication that endpoint has.
+
 ## D-014: Validation library
 
 - **Decision:** `class-validator` + `class-transformer` DTOs (canonical NestJS style) rather

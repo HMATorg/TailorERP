@@ -122,6 +122,38 @@ describe('Notifications (e2e)', () => {
     expect(sent[0].subject).toContain('invited you to');
   });
 
+  it('completes the invite → accept → login flow', async () => {
+    const email = `e2e-invite-flow-${Date.now()}@example.test`;
+    const password = 'NewStaffPass1!';
+
+    const invite = await request(app.getHttpServer())
+      .post('/api/v1/users/invite')
+      .set({ Authorization: `Bearer ${staffToken}` })
+      .send({ email, fullName: 'Flow Invitee', assignments: [{ storeId, role: 'cashier' }] })
+      .expect(201);
+
+    // The accept endpoint is public — the token is the only credential
+    await request(app.getHttpServer())
+      .post('/api/v1/users/accept-invite')
+      .send({ token: invite.body.devAcceptToken, password, fullName: 'Flow Invitee' })
+      .expect(201);
+
+    const login = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .send({ email, password })
+      .expect(200);
+    expect(login.body.user.storeRoles).toEqual([{ storeId, role: 'cashier' }]);
+
+    // A token cannot be redeemed twice
+    await request(app.getHttpServer())
+      .post('/api/v1/users/accept-invite')
+      .send({ token: invite.body.devAcceptToken, password })
+      .expect(400);
+
+    await prisma.userStoreRole.deleteMany({ where: { user: { email } } });
+    await prisma.user.deleteMany({ where: { email } });
+  });
+
   it('keeps the org scoped: alerts only reach the right organisation', async () => {
     const alert = await prisma.inventoryRestockAlert.findFirst({
       where: { storeId, fabricName: fabric },

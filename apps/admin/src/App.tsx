@@ -1,5 +1,6 @@
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import AppLayout from './layout/AppLayout';
+import AcceptInvite from './pages/AcceptInvite';
 import Alerts from './pages/Alerts';
 import Appointments from './pages/Appointments';
 import BatchDetail from './pages/BatchDetail';
@@ -18,6 +19,7 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/accept-invite" element={<AcceptInvite />} />
         <Route element={<AppLayout />}>
           <Route path="/" element={<Dashboard />} />
           <Route path="/orders" element={<Orders />} />

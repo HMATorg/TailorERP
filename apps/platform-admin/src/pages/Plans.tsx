@@ -39,6 +39,8 @@ interface Plan {
   monthlyPrice: string | null;
   yearlyPrice: string | null;
   isPublic: boolean;
+  stripeMonthlyPriceId: string | null;
+  stripeYearlyPriceId: string | null;
 }
 
 export default function Plans() {
@@ -80,6 +82,11 @@ export default function Plans() {
               <p>
                 Up to <b>{p.maxStores}</b> stores · <b>{p.maxUsers}</b> users
               </p>
+              {!p.stripeMonthlyPriceId && !p.stripeYearlyPriceId && (
+                <Tag color="orange" style={{ marginBlockEnd: 8 }}>
+                  Not purchasable — no Stripe price
+                </Tag>
+              )}
               <div>
                 {p.features.map((f) => (
                   <Tag key={f} style={{ marginBlockEnd: 4 }}>
@@ -155,6 +162,22 @@ export default function Plans() {
             <Col span={12}>
               <Form.Item name="yearlyPrice" label="Yearly price (SAR)">
                 <InputNumber min={0} style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Row gutter={12}>
+            <Col span={12}>
+              <Form.Item
+                name="stripeMonthlyPriceId"
+                label="Stripe monthly price ID"
+                extra="Required before this plan can be purchased"
+              >
+                <Input placeholder="price_..." />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="stripeYearlyPriceId" label="Stripe yearly price ID">
+                <Input placeholder="price_..." />
               </Form.Item>
             </Col>
           </Row>

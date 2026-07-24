@@ -4,6 +4,7 @@ import { validateEnv } from './config/env.validation';
 import { AppointmentsModule } from './appointments/appointments.module';
 import { AuditModule } from './audit/audit.module';
 import { AuthModule } from './auth/auth.module';
+import { BillingModule } from './billing/billing.module';
 import { CustomerModule } from './customer-api/customer.module';
 import { CustomersModule } from './customers/customers.module';
 import { DashboardModule } from './dashboard/dashboard.module';
@@ -37,6 +38,7 @@ import { TeamModule } from './team/team.module';
     DashboardModule,
     NotificationsModule,
     PlatformModule,
+    BillingModule,
     HealthModule,
   ],
 })

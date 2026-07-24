@@ -120,4 +120,14 @@ export class UpsertPlanDto {
   @IsBoolean()
   @IsOptional()
   isPublic?: boolean;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(255)
+  stripeMonthlyPriceId?: string;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(255)
+  stripeYearlyPriceId?: string;
 }
