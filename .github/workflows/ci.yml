@@ -31,6 +31,12 @@ jobs:
       REDIS_PORT: 6379
       JWT_ACCESS_SECRET: ci-access-secret
       JWT_REFRESH_SECRET: ci-refresh-secret
+      JWT_STAFF_ACCESS_TTL: 3600
+      JWT_STAFF_REFRESH_TTL: 604800
+      JWT_CUSTOMER_ACCESS_TTL: 900
+      JWT_PLATFORM_ACCESS_TTL: 3600
+      JWT_IMPERSONATION_TTL: 1800
+      TOKEN_ENCRYPTION_KEY: '0000000000000000000000000000000000000000000000000000000000000000'
 
     steps:
       - uses: actions/checkout@v4
@@ -43,4 +49,7 @@ jobs:
       - run: npm run prisma:deploy -w @tailonix/api
       - run: npm run lint --workspaces --if-present
       - run: npm run test --workspaces --if-present
+      # e2e drives the real API against Postgres/Redis and needs the seeded fixtures
+      - run: npm run db:seed
+      - run: npm run test:e2e -w @tailonix/api
       - run: npm run build

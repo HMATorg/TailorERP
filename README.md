@@ -34,6 +34,25 @@ npm run dev:pwa               # customer PWA on http://localhost:5174
 npm run dev:platform-admin    # platform admin on http://localhost:5175
 ```
 
+## Testing
+
+```bash
+npm run test --workspaces --if-present   # unit: FIFO, permissions, slot availability
+npm run test:e2e -w @tailonix/api        # e2e: platform admin API (needs docker + seed)
+```
+
+## Seeded dev logins
+
+Password for all: `Tailonix@Dev1`
+
+| Role | Credential |
+|------|-----------|
+| Platform super admin | `admin@tailonix.com` |
+| HQ Admin (tenant) | `owner@alanwar.example` |
+| Store Manager | `manager.jeddah@alanwar.example` |
+| Tailor | `tailor.jeddah@alanwar.example` |
+| Customer (PWA) | phone `+966512345678` — OTP is printed to the API log in dev |
+
 ## Key documents
 
 - [PRD](docs/PRD.md) — product requirements (v3.0)
