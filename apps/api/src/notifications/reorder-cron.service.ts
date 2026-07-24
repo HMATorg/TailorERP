@@ -8,6 +8,8 @@ import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 import { Queue, Worker } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
+import { lowStockDigest } from './email-templates';
+import { MailerService } from './mailer.service';
 import { QUEUE_NAMES } from './queues';
 
 const REORDER_JOB = 'reorder-check';
@@ -26,6 +28,7 @@ export class ReorderCronService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly mailer: MailerService,
   ) {}
 
   async onModuleInit() {
@@ -124,8 +127,63 @@ export class ReorderCronService implements OnModuleInit, OnModuleDestroy {
         },
       });
       created += 1;
-      // TODO(email digest): aggregate per store and push to email-queue (I-5)
+    }
+    if (created > 0) {
+      await this.sendDigest(storeId);
     }
     return created;
+  }
+
+  /**
+   * Emails the day's pending alerts to everyone who manages the store:
+   * its store managers plus the organization's HQ admins (I-5).
+   */
+  private async sendDigest(storeId: string): Promise<void> {
+    const store = await this.prisma.store.findUnique({
+      where: { id: storeId },
+      select: { name: true, organizationId: true },
+    });
+    if (!store) return;
+
+    const alerts = await this.prisma.inventoryRestockAlert.findMany({
+      where: { storeId, status: 'pending' },
+      orderBy: { fabricName: 'asc' },
+    });
+    if (alerts.length === 0) return;
+
+    const recipients = await this.prisma.user.findMany({
+      where: {
+        isActive: true,
+        OR: [
+          { organizationId: store.organizationId, orgRole: 'hq_admin' },
+          {
+            storeRoles: {
+              some: { storeId, isActive: true, role: { in: ['store_manager', 'regional_manager'] } },
+            },
+          },
+        ],
+      },
+      select: { email: true },
+    });
+    if (recipients.length === 0) return;
+
+    const mail = lowStockDigest(
+      store.name,
+      alerts.map((a) => ({
+        fabricName: a.fabricName,
+        currentQty: a.currentQty?.toString() ?? '0',
+        thresholdQty: a.thresholdQty?.toString() ?? '0',
+        suggestedOrderQty: a.suggestedOrderQty?.toString() ?? '0',
+      })),
+    );
+
+    await Promise.all(
+      recipients.map((r) =>
+        this.mailer.send({ to: r.email, ...mail }).catch(() => undefined),
+      ),
+    );
+    this.logger.log(
+      `Low-stock digest for ${store.name}: ${alerts.length} alert(s) → ${recipients.length} recipient(s)`,
+    );
   }
 }

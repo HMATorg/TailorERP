@@ -133,6 +133,41 @@ npm workspaces (no pnpm dependency on dev machines). Node 24, TypeScript 5 stric
   chains is two customer rows; profiles are shared **within** an org across its stores
   (PRD hybrid-tenancy requirement), never across orgs.
 
+## D-015: Notification channel priority and fallback
+
+- **Decision:** On `order.status.changed` the worker tries **WhatsApp first** when
+  the customer has consented; if the send throws (or there is no consent), it falls
+  through to **web push** to the customer's registered devices. SMS remains the
+  final planned hop but is unimplemented pending a Gulf gateway choice.
+- **Rationale:** PRD §4.4 requires the fallback chain, and consent is a hard gate on
+  the WhatsApp leg. Push needs no consent record beyond the browser permission the
+  customer already granted, so it is the correct second hop.
+- **Note:** Push copy is *not* a WhatsApp template — templates need Meta pre-approval
+  and are variable-substituted, whereas push text is free-form. They are maintained
+  separately (`PUSH_COPY` in `notification.worker.ts`), localised en/ar.
+
+## D-016: `validateEnv` must return the whole config
+
+- **Bug found in implementation:** NestJS `ConfigModule` **replaces the entire
+  configuration object** with whatever the `validate` function returns. Returning
+  only the validated class instance silently dropped every undeclared variable —
+  `TOKEN_ENCRYPTION_KEY`, `OTP_*`, `WHATSAPP_*`, `VAPID_*`, and all JWT TTLs — which
+  then fell back to code defaults with no error. In production this would have broken
+  WhatsApp access-token decryption.
+- **Decision:** `validateEnv` returns `{ ...config, ...instanceToPlain(validated) }`,
+  and a regression test asserts undeclared vars survive.
+- **Rule going forward:** adding a required env var means adding it to `EnvVariables`;
+  adding an optional one needs no change, but never narrow the return type again.
+
+## D-017: Service worker owns push (Workbox `injectManifest`)
+
+- **Decision:** The PWA switched from `generateSW` to **`injectManifest`** with a
+  hand-written `src/sw.ts`.
+- **Rationale:** `generateSW` cannot host custom `push` / `notificationclick`
+  listeners. The hand-written worker keeps the same caching strategy (precache +
+  network-first for `/api/`) and adds push handling that focuses an already-open tab
+  before opening a new window.
+
 ## D-014: Validation library
 
 - **Decision:** `class-validator` + `class-transformer` DTOs (canonical NestJS style) rather

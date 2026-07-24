@@ -6,12 +6,15 @@ import {
   HttpException,
   HttpStatus,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Prisma } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { AuditService } from '../audit/audit.service';
+import { staffInvitation } from '../notifications/email-templates';
+import { MailerService } from '../notifications/mailer.service';
 import { PrismaService } from '../prisma/prisma.service';
 import type {
   AcceptInviteDto,
@@ -22,10 +25,13 @@ import type {
 
 @Injectable()
 export class TeamService {
+  private readonly logger = new Logger(TeamService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly audit: AuditService,
+    private readonly mailer: MailerService,
   ) {}
 
   private async assertActorCanGrantHq(actorId: string, wantsHq: boolean) {
@@ -132,7 +138,8 @@ export class TeamService {
       ip,
     });
 
-    // TODO(task #10): send invitation email via email-queue.
+    await this.sendInvitationEmail(invitation.id, actorId, orgId, email, token, assignments);
+
     const isDev = this.config.get('NODE_ENV') !== 'production';
     return {
       id: invitation.id,
@@ -140,6 +147,60 @@ export class TeamService {
       expiresAt: invitation.expiresAt,
       ...(isDev ? { devAcceptToken: token } : {}),
     };
+  }
+
+  /** Sends the invite email; delivery problems must not fail the invitation. */
+  private async sendInvitationEmail(
+    invitationId: string,
+    actorId: string,
+    orgId: string,
+    email: string,
+    token: string,
+    assignments: StoreAssignmentDto[],
+  ): Promise<void> {
+    try {
+      const [org, inviter, stores] = await Promise.all([
+        this.prisma.organization.findUnique({
+          where: { id: orgId },
+          select: { name: true },
+        }),
+        this.prisma.user.findUnique({
+          where: { id: actorId },
+          select: { fullName: true, email: true },
+        }),
+        assignments.length > 0
+          ? this.prisma.store.findMany({
+              where: { id: { in: assignments.map((a) => a.storeId) } },
+              select: { id: true, name: true },
+            })
+          : Promise.resolve([]),
+      ]);
+
+      const storeNames = new Map(stores.map((s) => [s.id, s.name]));
+      const roleSummary =
+        assignments.length > 0
+          ? assignments
+              .map(
+                (a) =>
+                  `${a.role.replace('_', ' ')} at ${storeNames.get(a.storeId) ?? 'a store'}`,
+              )
+              .join(', ')
+          : 'HQ Admin (all stores)';
+
+      const baseUrl = this.config.get<string>('ADMIN_APP_URL', 'http://localhost:5173');
+      await this.mailer.send({
+        to: email,
+        ...staffInvitation({
+          organizationName: org?.name ?? 'your organisation',
+          inviterName: inviter?.fullName ?? inviter?.email ?? 'A colleague',
+          acceptUrl: `${baseUrl}/accept-invite?token=${token}`,
+          roleSummary,
+        }),
+      });
+    } catch {
+      // The invitation row exists regardless; it can be resent from Team.
+      this.logger.warn(`Invitation email to ${email} could not be sent (id ${invitationId})`);
+    }
   }
 
   async acceptInvite(dto: AcceptInviteDto) {
