@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { DatePicker, Select, Space, Table, Tag, Typography, message } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
+import { useTranslation } from 'react-i18next';
 import { api, errMsg } from '../api/client';
 import { useAuthStore } from '../stores/auth';
 
@@ -15,6 +16,7 @@ const statusColors: Record<string, string> = {
 
 export default function Appointments() {
   const { activeStoreId } = useAuthStore();
+  const { t } = useTranslation();
   const [date, setDate] = useState<Dayjs>(dayjs());
   const [rows, setRows] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(false);
@@ -40,7 +42,7 @@ export default function Appointments() {
   }, [load, activeStoreId]);
 
   if (!storeSelected) {
-    return <Typography.Paragraph type="secondary">Select a store to view its appointments.</Typography.Paragraph>;
+    return <Typography.Paragraph type="secondary">{t('app.selectStorePrompt')}</Typography.Paragraph>;
   }
 
   const updateStatus = async (id: string, status: string) => {
@@ -62,7 +64,7 @@ export default function Appointments() {
         pagination={false}
         columns={[
           {
-            title: 'Time',
+            title: t('appointment.time'),
             dataIndex: 'scheduledAt',
             render: (v: string) => dayjs(v).format('HH:mm'),
             sorter: (a: Record<string, unknown>, b: Record<string, unknown>) =>
@@ -70,30 +72,38 @@ export default function Appointments() {
             defaultSortOrder: 'ascend',
           },
           {
-            title: 'Customer',
+            title: t('order.customer'),
             render: (_, r: Record<string, unknown>) => {
               const c = r.customer as { fullName: string; phone: string };
               return `${c.fullName} (${c.phone})`;
             },
           },
-          { title: 'Type', dataIndex: 'appointmentType', render: (v: string) => v.replace('_', ' ') },
-          { title: 'Duration', dataIndex: 'durationMinutes', render: (v: number) => `${v} min` },
           {
-            title: 'Tailor',
+            title: t('appointment.type'),
+            dataIndex: 'appointmentType',
+            render: (v: string) => t(`appointment.${v}`, v),
+          },
+          {
+            title: t('appointment.duration'),
+            dataIndex: 'durationMinutes',
+            render: (v: number) => t('appointment.minutes', { count: v }),
+          },
+          {
+            title: t('appointment.tailor'),
             render: (_, r: Record<string, unknown>) =>
               (r.assignedTailor as { fullName?: string } | null)?.fullName ?? '—',
           },
           {
-            title: 'Status',
+            title: t('app.status'),
             render: (_, r: Record<string, unknown>) => (
               <Select
                 size="small"
                 value={String(r.status)}
-                style={{ width: 140 }}
+                style={{ width: 150 }}
                 onChange={(v) => updateStatus(String(r.id), v)}
                 options={Object.keys(statusColors).map((s) => ({
                   value: s,
-                  label: <Tag color={statusColors[s]}>{s.replace('_', ' ')}</Tag>,
+                  label: <Tag color={statusColors[s]}>{t(`apptStatus.${s}`, s)}</Tag>,
                 }))}
               />
             ),

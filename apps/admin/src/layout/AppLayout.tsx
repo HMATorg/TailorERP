@@ -13,7 +13,9 @@ import {
   WarningOutlined,
 } from '@ant-design/icons';
 import { Avatar, Dropdown, Layout, Menu, Space, Typography } from 'antd';
+import { useTranslation } from 'react-i18next';
 import { Link, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import LanguageSwitcher from '../components/LanguageSwitcher';
 import StoreSwitcher from '../components/StoreSwitcher';
 import { useAuthStore } from '../stores/auth';
 
@@ -21,26 +23,27 @@ const { Header, Sider, Content } = Layout;
 
 export default function AppLayout() {
   const { user, accessToken, logout } = useAuthStore();
+  const { t } = useTranslation();
   const location = useLocation();
   const navigate = useNavigate();
   const isHq = user?.orgRole === 'hq_admin';
 
   const menuItems = useMemo(
     () => [
-      { key: '/', icon: <DashboardOutlined />, label: <Link to="/">Dashboard</Link> },
-      { key: '/orders', icon: <ShoppingOutlined />, label: <Link to="/orders">Orders</Link> },
-      { key: '/customers', icon: <UserOutlined />, label: <Link to="/customers">Customers</Link> },
-      { key: '/inventory', icon: <InboxOutlined />, label: <Link to="/inventory">Inventory</Link> },
-      { key: '/alerts', icon: <WarningOutlined />, label: <Link to="/alerts">Stock Alerts</Link> },
-      { key: '/appointments', icon: <CalendarOutlined />, label: <Link to="/appointments">Appointments</Link> },
+      { key: '/', icon: <DashboardOutlined />, label: <Link to="/">{t('nav.dashboard')}</Link> },
+      { key: '/orders', icon: <ShoppingOutlined />, label: <Link to="/orders">{t('nav.orders')}</Link> },
+      { key: '/customers', icon: <UserOutlined />, label: <Link to="/customers">{t('nav.customers')}</Link> },
+      { key: '/inventory', icon: <InboxOutlined />, label: <Link to="/inventory">{t('nav.inventory')}</Link> },
+      { key: '/alerts', icon: <WarningOutlined />, label: <Link to="/alerts">{t('nav.alerts')}</Link> },
+      { key: '/appointments', icon: <CalendarOutlined />, label: <Link to="/appointments">{t('nav.appointments')}</Link> },
       ...(isHq
         ? [
-            { key: '/team', icon: <TeamOutlined />, label: <Link to="/team">Team</Link> },
-            { key: '/stores', icon: <ShopOutlined />, label: <Link to="/stores">Stores</Link> },
+            { key: '/team', icon: <TeamOutlined />, label: <Link to="/team">{t('nav.team')}</Link> },
+            { key: '/stores', icon: <ShopOutlined />, label: <Link to="/stores">{t('nav.stores')}</Link> },
           ]
         : []),
     ],
-    [isHq],
+    [isHq, t],
   );
 
   if (!accessToken) return <Navigate to="/login" replace />;
@@ -55,7 +58,7 @@ export default function AppLayout() {
     <Layout style={{ minHeight: '100vh' }}>
       <Sider theme="light" width={220} breakpoint="lg" collapsedWidth={64}>
         <div style={{ padding: '16px 20px', fontWeight: 700, fontSize: 18, color: '#00695C' }}>
-          Tailonix
+          {t('app.name')}
         </div>
         <Menu mode="inline" selectedKeys={[selectedKey]} items={menuItems} style={{ borderInlineEnd: 0 }} />
       </Sider>
@@ -68,6 +71,7 @@ export default function AppLayout() {
             alignItems: 'center',
             justifyContent: 'space-between',
             borderBlockEnd: '1px solid #f0f0f0',
+            gap: 12,
             position: 'sticky',
             top: 0,
             zIndex: 10,
@@ -75,6 +79,7 @@ export default function AppLayout() {
         >
           <StoreSwitcher />
           <Space size="large">
+            <LanguageSwitcher />
             <BellOutlined style={{ fontSize: 18, color: '#757575' }} />
             <Dropdown
               menu={{
@@ -88,7 +93,7 @@ export default function AppLayout() {
                   {
                     key: 'logout',
                     icon: <LogoutOutlined />,
-                    label: 'Logout',
+                    label: t('app.logout'),
                     onClick: () => {
                       logout();
                       navigate('/login');

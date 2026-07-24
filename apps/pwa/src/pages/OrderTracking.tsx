@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
 import { api, errMsg } from '../api';
 
@@ -26,6 +27,7 @@ interface OrderDetail {
 
 export default function OrderTracking() {
   const { id } = useParams();
+  const { t, i18n } = useTranslation();
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -37,7 +39,7 @@ export default function OrderTracking() {
   }, [id]);
 
   if (error) return <div className="page"><p className="error-text">{error}</p></div>;
-  if (!order) return <div className="page"><p className="muted">Loading…</p></div>;
+  if (!order) return <div className="page"><p className="muted">{t('app.loading')}</p></div>;
 
   const doneUpTo = order.timeline.filter((t) => t.reachedAt).length;
   const balance = (Number(order.totalAmount) - Number(order.paidAmount)).toFixed(2);
@@ -45,25 +47,28 @@ export default function OrderTracking() {
   return (
     <div className="page">
       <div className="row">
-        <h2>{order.orderNumber}</h2>
-        <span className={`badge ${order.status}`}>{order.status}</span>
+        <h2 dir="ltr">{order.orderNumber}</h2>
+        <span className={`badge ${order.status}`}>{t(`status.${order.status}`, order.status)}</span>
       </div>
       <p className="muted">{order.store.name}</p>
 
       <div className="card">
         <div className="stepper">
-          {order.timeline.map((t, i) => (
+          {order.timeline.map((step, i) => (
             <div
-              key={t.step}
-              className={`step ${t.reachedAt && !t.current ? 'done' : ''} ${t.current ? 'current' : ''} ${
-                i < doneUpTo - 1 ? 'done' : ''
-              }`}
+              key={step.step}
+              className={`step ${step.reachedAt && !step.current ? 'done' : ''} ${
+                step.current ? 'current' : ''
+              } ${i < doneUpTo - 1 ? 'done' : ''}`}
             >
-              <div className="step-dot">{t.reachedAt && !t.current ? '✓' : i + 1}</div>
-              <span className="step-label">{t.step}</span>
-              {t.reachedAt && (
+              <div className="step-dot">{step.reachedAt && !step.current ? '✓' : i + 1}</div>
+              <span className="step-label">{t(`status.${step.step}`, step.step)}</span>
+              {step.reachedAt && (
                 <span className="step-time">
-                  {new Date(t.reachedAt).toLocaleDateString(undefined, { day: '2-digit', month: 'short' })}
+                  {new Date(step.reachedAt).toLocaleDateString(i18n.language, {
+                    day: '2-digit',
+                    month: 'short',
+                  })}
                 </span>
               )}
             </div>
@@ -72,7 +77,7 @@ export default function OrderTracking() {
       </div>
 
       <div className="card">
-        <h3 style={{ fontSize: 16 }}>Details</h3>
+        <h3 style={{ fontSize: 16 }}>{t('orders.details')}</h3>
         {order.items.map((item, i) => (
           <div key={i} style={{ marginBlockEnd: 8 }}>
             <strong>
@@ -90,20 +95,30 @@ export default function OrderTracking() {
           </div>
         ))}
         <div className="row muted">
-          <span>Total: SAR {order.totalAmount}</span>
-          <span>{Number(balance) > 0 ? `Balance: SAR ${balance}` : 'Paid in full'}</span>
+          <span>
+            {t('orders.total')}: SAR {order.totalAmount}
+          </span>
+          <span>
+            {Number(balance) > 0
+              ? `${t('orders.balance')}: SAR ${balance}`
+              : t('orders.paidInFull')}
+          </span>
         </div>
-        {order.dueDate && <p className="muted">Estimated completion: {order.dueDate.slice(0, 10)}</p>}
+        {order.dueDate && (
+          <p className="muted">
+            {t('orders.estimatedCompletion', { date: order.dueDate.slice(0, 10) })}
+          </p>
+        )}
       </div>
 
       <a
         className="fab-wa"
         href={`https://wa.me/${(order.store.phone ?? '').replace(/\D/g, '')}?text=${encodeURIComponent(
-          `Hi, I have a question about order ${order.orderNumber}`,
+          t('orders.chatPrefill', { number: order.orderNumber }),
         )}`}
         target="_blank"
         rel="noreferrer"
-        aria-label="Chat with us on WhatsApp"
+        aria-label={t('orders.chatAria')}
       >
         💬
       </a>

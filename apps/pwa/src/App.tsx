@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { BrowserRouter, Navigate, NavLink, Outlet, Route, Routes } from 'react-router-dom';
 import { useAuth } from './api';
 import Appointments from './pages/Appointments';
@@ -8,19 +9,23 @@ import Profile from './pages/Profile';
 
 function Shell() {
   const accessToken = useAuth((s) => s.accessToken);
+  const { t } = useTranslation();
   if (!accessToken) return <Navigate to="/login" replace />;
   return (
     <div className="shell">
       <Outlet />
       <nav className="tabbar">
         <NavLink to="/" end className={({ isActive }) => (isActive ? 'active' : '')}>
-          <span className="tab-icon">🧵</span>Orders
+          <span className="tab-icon">🧵</span>
+          {t('nav.orders')}
         </NavLink>
         <NavLink to="/appointments" className={({ isActive }) => (isActive ? 'active' : '')}>
-          <span className="tab-icon">📅</span>Appointments
+          <span className="tab-icon">📅</span>
+          {t('nav.appointments')}
         </NavLink>
         <NavLink to="/profile" className={({ isActive }) => (isActive ? 'active' : '')}>
-          <span className="tab-icon">👤</span>Profile
+          <span className="tab-icon">👤</span>
+          {t('nav.profile')}
         </NavLink>
       </nav>
     </div>

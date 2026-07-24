@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, Input, InputNumber, Modal, Table, Typography, message } from 'antd';
+import { Trans, useTranslation } from 'react-i18next';
 import { api, errMsg } from '../api/client';
 
 export interface BatchRow {
@@ -39,6 +40,7 @@ export default function BatchSelectorModal({
   onCancel,
   onConfirm,
 }: Props) {
+  const { t } = useTranslation();
   const [batches, setBatches] = useState<BatchRow[]>([]);
   const [filter, setFilter] = useState('');
   const [qty, setQty] = useState<Record<string, number>>({});
@@ -77,9 +79,9 @@ export default function BatchSelectorModal({
   return (
     <Modal
       open={open}
-      title={`Select Batch — ${fabricName}`}
+      title={`${t('inventory.selectBatch')} — ${fabricName}`}
       onCancel={onCancel}
-      okText="Add to Order"
+      okText={t('inventory.addToOrder')}
       okButtonProps={{ disabled: selectedTotal !== requiredQty || insufficientStock }}
       onOk={() =>
         onConfirm(
@@ -93,12 +95,12 @@ export default function BatchSelectorModal({
       {insufficientStock && (
         <Alert
           type="error"
-          message={`Insufficient stock. Available: ${totalAvailable}`}
+          message={t('inventory.insufficientStock', { available: totalAvailable })}
           style={{ marginBlockEnd: 12 }}
         />
       )}
       <Input.Search
-        placeholder="Filter by batch code"
+        placeholder={t('inventory.filterByBatchCode')}
         allowClear
         onChange={(e) => setFilter(e.target.value)}
         style={{ marginBlockEnd: 12 }}
@@ -111,16 +113,16 @@ export default function BatchSelectorModal({
         pagination={false}
         scroll={{ y: 280 }}
         columns={[
-          { title: 'Batch Code', dataIndex: 'batchCode' },
-          { title: 'Color', dataIndex: 'color', render: (v) => v ?? '—' },
+          { title: t('inventory.batchCode'), dataIndex: 'batchCode' },
+          { title: t('inventory.color'), dataIndex: 'color', render: (v) => v ?? '—' },
           {
-            title: 'Available',
+            title: t('inventory.available'),
             dataIndex: 'currentQuantity',
             render: (v: string, r) => `${v} ${r.unit}`,
           },
-          { title: 'Location', dataIndex: 'storageLocation', render: (v) => v ?? '—' },
+          { title: t('inventory.location'), dataIndex: 'storageLocation', render: (v) => v ?? '—' },
           {
-            title: 'Use qty',
+            title: t('inventory.useQty'),
             width: 120,
             render: (_, r) => (
               <InputNumber
@@ -135,7 +137,11 @@ export default function BatchSelectorModal({
         ]}
       />
       <Typography.Paragraph style={{ marginBlockStart: 12, textAlign: 'end' }}>
-        You need <b>{requiredQty}</b> total. Selected: <b>{selectedTotal}</b>
+        <Trans
+          i18nKey="inventory.youNeed"
+          values={{ required: requiredQty, selected: selectedTotal }}
+          components={{ 1: <b />, 3: <b /> }}
+        />
       </Typography.Paragraph>
     </Modal>
   );

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Card, Col, DatePicker, Row, Space, Statistic, Table, Tag, Typography, message } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
+import { useTranslation } from 'react-i18next';
 import { api, errMsg } from '../api/client';
 import { useAuthStore } from '../stores/auth';
 
@@ -33,6 +34,7 @@ const statusColors: Record<string, string> = {
 
 export default function Dashboard() {
   const { activeStoreId, setActiveStore, user } = useAuthStore();
+  const { t } = useTranslation();
   const isAll = activeStoreId === 'all';
   const [hq, setHq] = useState<HqData | null>(null);
   const [store, setStore] = useState<StoreData | null>(null);
@@ -67,7 +69,7 @@ export default function Dashboard() {
       <Space direction="vertical" size="large" style={{ width: '100%' }}>
         <Space style={{ justifyContent: 'space-between', width: '100%' }} wrap>
           <Typography.Title level={4} style={{ margin: 0 }}>
-            HQ Overview — {user?.organization.name}
+            {t('dashboard.hqOverview')} — {user?.organization.name}
           </Typography.Title>
           <DatePicker.RangePicker
             value={range}
@@ -78,30 +80,30 @@ export default function Dashboard() {
         <Row gutter={[16, 16]}>
           <Col xs={12} lg={6}>
             <Card loading={loading}>
-              <Statistic title="Revenue" value={hq?.totals?.revenue ?? '0'} prefix="SAR" />
+              <Statistic title={t('dashboard.revenue')} value={hq?.totals?.revenue ?? '0'} prefix="SAR" />
             </Card>
           </Col>
           <Col xs={12} lg={6}>
             <Card loading={loading}>
-              <Statistic title="Orders" value={hq?.totals?.orderCount ?? 0} />
+              <Statistic title={t('dashboard.orders')} value={hq?.totals?.orderCount ?? 0} />
             </Card>
           </Col>
           <Col xs={12} lg={6}>
             <Card loading={loading}>
-              <Statistic title="Stores" value={hq?.totals?.storeCount ?? 0} />
+              <Statistic title={t('dashboard.stores')} value={hq?.totals?.storeCount ?? 0} />
             </Card>
           </Col>
           <Col xs={12} lg={6}>
             <Card loading={loading}>
               <Statistic
-                title="Low Stock Alerts"
+                title={t('dashboard.lowStockAlerts')}
                 value={hq?.totals?.pendingAlerts ?? 0}
                 valueStyle={(hq?.totals?.pendingAlerts ?? 0) > 0 ? { color: '#C62828' } : undefined}
               />
             </Card>
           </Col>
         </Row>
-        <Card title="Store Performance" loading={loading}>
+        <Card title={t('dashboard.storePerformance')} loading={loading}>
           <Table
             rowKey="storeId"
             dataSource={hq?.stores ?? []}
@@ -111,16 +113,16 @@ export default function Dashboard() {
               onClick: () => setActiveStore(row.storeId),
             })}
             columns={[
-              { title: 'Store', dataIndex: 'storeName', sorter: (a, b) => a.storeName.localeCompare(b.storeName) },
+              { title: t('store.name'), dataIndex: 'storeName', sorter: (a, b) => a.storeName.localeCompare(b.storeName) },
               {
-                title: 'Revenue (SAR)',
+                title: `${t('dashboard.revenue')} (SAR)`,
                 dataIndex: 'revenue',
                 sorter: (a, b) => Number(a.revenue) - Number(b.revenue),
                 defaultSortOrder: 'descend',
               },
-              { title: 'Orders', dataIndex: 'orderCount' },
+              { title: t('dashboard.orders'), dataIndex: 'orderCount' },
               {
-                title: 'Avg Order Value',
+                title: t('dashboard.avgOrderValue'),
                 dataIndex: 'avgOrderValue',
                 render: (v: string) => Number(v).toFixed(2),
               },
@@ -141,7 +143,7 @@ export default function Dashboard() {
         <Col xs={12} lg={6}>
           <Card loading={loading}>
             <Statistic
-              title="Revenue Today"
+              title={t('dashboard.revenueToday')}
               value={revToday}
               prefix="SAR"
               suffix={
@@ -156,13 +158,13 @@ export default function Dashboard() {
         </Col>
         <Col xs={12} lg={6}>
           <Card loading={loading}>
-            <Statistic title="Orders Today" value={store?.today.orderCount ?? 0} />
+            <Statistic title={t('dashboard.ordersToday')} value={store?.today.orderCount ?? 0} />
           </Card>
         </Col>
         <Col xs={12} lg={6}>
           <Card loading={loading}>
             <Statistic
-              title="Active Orders"
+              title={t('dashboard.activeOrders')}
               value={Object.values(store?.activeOrdersByStatus ?? {}).reduce((a, b) => a + b, 0)}
             />
           </Card>
@@ -170,7 +172,7 @@ export default function Dashboard() {
         <Col xs={12} lg={6}>
           <Card loading={loading}>
             <Statistic
-              title="Low Stock Alerts"
+              title={t('dashboard.lowStockAlerts')}
               value={store?.pendingAlerts ?? 0}
               valueStyle={(store?.pendingAlerts ?? 0) > 0 ? { color: '#C62828' } : undefined}
             />
@@ -179,21 +181,21 @@ export default function Dashboard() {
       </Row>
       <Row gutter={[16, 16]}>
         <Col xs={24} lg={10}>
-          <Card title="Work in Progress" loading={loading}>
+          <Card title={t('dashboard.workInProgress')} loading={loading}>
             <Space wrap>
               {Object.entries(store?.activeOrdersByStatus ?? {}).map(([status, count]) => (
                 <Tag key={status} color={statusColors[status] ?? 'default'} style={{ fontSize: 14, padding: '4px 10px' }}>
-                  {status}: {count}
+                  {t(`status.${status}`, status)}: {count}
                 </Tag>
               ))}
               {Object.keys(store?.activeOrdersByStatus ?? {}).length === 0 && (
-                <Typography.Text type="secondary">No active orders</Typography.Text>
+                <Typography.Text type="secondary">{t('dashboard.noActiveOrders')}</Typography.Text>
               )}
             </Space>
           </Card>
         </Col>
         <Col xs={24} lg={14}>
-          <Card title="Today's Appointments" loading={loading}>
+          <Card title={t('dashboard.todaysAppointments')} loading={loading}>
             <Table
               rowKey="id"
               size="small"
@@ -201,13 +203,21 @@ export default function Dashboard() {
               dataSource={store?.todayAppointments ?? []}
               columns={[
                 {
-                  title: 'Time',
+                  title: t('appointment.time'),
                   dataIndex: 'scheduledAt',
                   render: (v: string) => dayjs(v).format('HH:mm'),
                 },
-                { title: 'Customer', render: (_, r) => r.customer.fullName },
-                { title: 'Type', dataIndex: 'appointmentType' },
-                { title: 'Status', dataIndex: 'status', render: (v: string) => <Tag>{v}</Tag> },
+                { title: t('order.customer'), render: (_, r) => r.customer.fullName },
+                {
+                  title: t('appointment.type'),
+                  dataIndex: 'appointmentType',
+                  render: (v: string) => t(`appointment.${v}`, v),
+                },
+                {
+                  title: t('app.status'),
+                  dataIndex: 'status',
+                  render: (v: string) => <Tag>{t(`apptStatus.${v}`, v)}</Tag>,
+                },
               ]}
             />
           </Card>

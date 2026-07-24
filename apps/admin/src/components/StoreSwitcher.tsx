@@ -1,5 +1,6 @@
 import { Badge, Select } from 'antd';
 import { ShopOutlined } from '@ant-design/icons';
+import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../stores/auth';
 
 const statusColor: Record<string, string> = {
@@ -11,11 +12,12 @@ const statusColor: Record<string, string> = {
 /** Wireframes §3.1: searchable store dropdown with status dots; HQ admins get "All Stores". */
 export default function StoreSwitcher() {
   const { user, stores, activeStoreId, setActiveStore } = useAuthStore();
+  const { t } = useTranslation();
   const isHq = user?.orgRole === 'hq_admin';
 
   const options = [
     ...(isHq
-      ? [{ value: 'all', label: <span><ShopOutlined /> All Stores (HQ Overview)</span> }]
+      ? [{ value: 'all', label: <span><ShopOutlined /> {t('store.allStores')}</span> }]
       : []),
     ...stores.map((s) => ({
       value: s.id,

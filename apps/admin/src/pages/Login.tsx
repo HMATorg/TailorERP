@@ -1,12 +1,15 @@
 import { useState } from 'react';
 import { Alert, Button, Card, Form, Input, Typography } from 'antd';
 import { LockOutlined, MailOutlined } from '@ant-design/icons';
+import { useTranslation } from 'react-i18next';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { errMsg } from '../api/client';
+import LanguageSwitcher from '../components/LanguageSwitcher';
 import { useAuthStore } from '../stores/auth';
 
 export default function Login() {
   const { login, accessToken } = useAuthStore();
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -23,11 +26,14 @@ export default function Login() {
       }}
     >
       <Card style={{ width: 380, boxShadow: '0 4px 24px rgba(0,0,0,0.08)' }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <LanguageSwitcher />
+        </div>
         <Typography.Title level={3} style={{ color: '#00695C', textAlign: 'center' }}>
-          Tailonix
+          {t('app.name')}
         </Typography.Title>
         <Typography.Paragraph type="secondary" style={{ textAlign: 'center' }}>
-          Staff sign in
+          {t('app.staffSignIn')}
         </Typography.Paragraph>
         {error && <Alert type="error" message={error} style={{ marginBlockEnd: 16 }} />}
         <Form
@@ -46,13 +52,13 @@ export default function Login() {
           }}
         >
           <Form.Item name="email" rules={[{ required: true, type: 'email' }]}>
-            <Input prefix={<MailOutlined />} placeholder="Email" size="large" />
+            <Input prefix={<MailOutlined />} placeholder={t('app.email')} size="large" />
           </Form.Item>
           <Form.Item name="password" rules={[{ required: true, min: 8 }]}>
-            <Input.Password prefix={<LockOutlined />} placeholder="Password" size="large" />
+            <Input.Password prefix={<LockOutlined />} placeholder={t('app.password')} size="large" />
           </Form.Item>
           <Button type="primary" htmlType="submit" block size="large" loading={loading}>
-            Sign in
+            {t('app.signIn')}
           </Button>
         </Form>
       </Card>

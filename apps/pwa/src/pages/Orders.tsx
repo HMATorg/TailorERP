@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { api, errMsg } from '../api';
 
@@ -14,6 +15,7 @@ interface OrderSummary {
 }
 
 export default function Orders() {
+  const { t } = useTranslation();
   const [orders, setOrders] = useState<OrderSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [offline, setOffline] = useState(!navigator.onLine);
@@ -35,26 +37,24 @@ export default function Orders() {
 
   return (
     <div>
-      {offline && (
-        <div className="offline-banner">You're offline — showing last saved data.</div>
-      )}
+      {offline && <div className="offline-banner">{t('app.offline')}</div>}
       <div className="page">
-        <h2>My Orders</h2>
+        <h2>{t('orders.title')}</h2>
         {error && <p className="error-text">{error}</p>}
-        {orders?.length === 0 && <p className="muted">No orders yet.</p>}
+        {orders?.length === 0 && <p className="muted">{t('orders.none')}</p>}
         {(orders ?? []).map((o) => (
           <Link key={o.id} to={`/orders/${o.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
             <div className="card">
               <div className="row">
-                <strong>{o.orderNumber}</strong>
-                <span className={`badge ${o.status}`}>{o.status}</span>
+                <strong dir="ltr">{o.orderNumber}</strong>
+                <span className={`badge ${o.status}`}>{t(`status.${o.status}`, o.status)}</span>
               </div>
               <p className="muted" style={{ marginBlock: 6 }}>
                 {o.items.map((i) => `${i.quantity}× ${i.garmentType}`).join(', ')}
               </p>
               <div className="row muted">
                 <span>{o.store.name}</span>
-                {o.dueDate && <span>Due {o.dueDate.slice(0, 10)}</span>}
+                {o.dueDate && <span>{t('orders.due', { date: o.dueDate.slice(0, 10) })}</span>}
               </div>
             </div>
           </Link>

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { api, errMsg } from '../api';
 
 interface Appointment {
@@ -19,14 +20,10 @@ interface Slot {
   available: boolean;
 }
 
-const TYPES = [
-  { value: 'measurement', label: 'Measurement' },
-  { value: 'first_fitting', label: 'First Fitting' },
-  { value: 'final_fitting', label: 'Final Fitting' },
-  { value: 'pickup', label: 'Pickup' },
-];
+const TYPE_VALUES = ['measurement', 'first_fitting', 'final_fitting', 'pickup'] as const;
 
 export default function Appointments() {
+  const { t, i18n } = useTranslation();
   const [list, setList] = useState<Appointment[]>([]);
   const [booking, setBooking] = useState(false);
   const [stores, setStores] = useState<StoreOpt[]>([]);
@@ -71,7 +68,7 @@ export default function Appointments() {
         appointmentType: type,
         scheduledAt: slot,
       });
-      setMsg('Appointment booked ✓');
+      setMsg(t('appointments.booked'));
       setBooking(false);
       load();
     } catch (e) {
@@ -91,9 +88,9 @@ export default function Appointments() {
   return (
     <div className="page">
       <div className="row">
-        <h2>Appointments</h2>
+        <h2>{t('appointments.title')}</h2>
         <button className="btn" style={{ width: 'auto' }} onClick={() => setBooking((b) => !b)}>
-          {booking ? 'Close' : '+ Book'}
+          {booking ? t('app.close') : t('appointments.book')}
         </button>
       </div>
       {msg && <p style={{ color: 'var(--status-ready)' }}>{msg}</p>}
@@ -103,7 +100,7 @@ export default function Appointments() {
         <div className="card">
           {stores.length > 1 && (
             <select className="input" value={storeId} onChange={(e) => setStoreId(e.target.value)}>
-              <option value="">Choose store…</option>
+              <option value="">{t('appointments.chooseStore')}</option>
               {stores.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name}
@@ -123,7 +120,7 @@ export default function Appointments() {
             <>
               <div className="slots-grid">
                 {slots.map((s) => {
-                  const label = new Date(s.time).toLocaleTimeString(undefined, {
+                  const label = new Date(s.time).toLocaleTimeString(i18n.language, {
                     hour: '2-digit',
                     minute: '2-digit',
                   });
@@ -138,39 +135,39 @@ export default function Appointments() {
                     </button>
                   );
                 })}
-                {slots.length === 0 && <p className="muted">No slots for this day.</p>}
+                {slots.length === 0 && <p className="muted">{t('appointments.noSlots')}</p>}
               </div>
               <div style={{ marginBlock: 12 }}>
-                {TYPES.map((t) => (
-                  <label key={t.value} style={{ display: 'inline-flex', alignItems: 'center', marginInlineEnd: 14 }}>
+                {TYPE_VALUES.map((value) => (
+                  <label key={value} style={{ display: 'inline-flex', alignItems: 'center', marginInlineEnd: 14 }}>
                     <input
                       type="radio"
                       name="type"
-                      checked={type === t.value}
-                      onChange={() => setType(t.value)}
+                      checked={type === value}
+                      onChange={() => setType(value)}
                       style={{ marginInlineEnd: 4 }}
                     />
-                    {t.label}
+                    {t(`appointments.${value}`)}
                   </label>
                 ))}
               </div>
               <button className="btn" disabled={!slot} onClick={() => void confirm()}>
-                Confirm Appointment
+                {t('appointments.confirm')}
               </button>
             </>
           )}
         </div>
       )}
 
-      {list.length === 0 && !booking && <p className="muted">No appointments yet.</p>}
+      {list.length === 0 && !booking && <p className="muted">{t('appointments.none')}</p>}
       {list.map((a) => (
         <div className="card" key={a.id}>
           <div className="row">
-            <strong>{TYPES.find((t) => t.value === a.appointmentType)?.label ?? a.appointmentType}</strong>
-            <span className={`badge ${a.status}`}>{a.status}</span>
+            <strong>{t(`appointments.${a.appointmentType}`, a.appointmentType)}</strong>
+            <span className={`badge ${a.status}`}>{t(`status.${a.status}`, a.status)}</span>
           </div>
           <p className="muted" style={{ marginBlock: 6 }}>
-            {new Date(a.scheduledAt).toLocaleString(undefined, {
+            {new Date(a.scheduledAt).toLocaleString(i18n.language, {
               weekday: 'short',
               day: '2-digit',
               month: 'short',
@@ -182,7 +179,7 @@ export default function Appointments() {
             <span className="muted">{a.store.name}</span>
             {['scheduled', 'confirmed'].includes(a.status) && (
               <button className="btn btn-ghost" style={{ width: 'auto', minHeight: 36 }} onClick={() => void cancel(a.id)}>
-                Cancel
+                {t('app.cancel')}
               </button>
             )}
           </div>

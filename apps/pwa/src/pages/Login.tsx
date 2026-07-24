@@ -1,11 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
+import { SUPPORTED_LANGUAGES } from '@tailonix/shared';
 import { api, errMsg, useAuth } from '../api';
+import { LANGUAGE_LABELS } from '../i18n';
 
 const OTP_LENGTH = 4;
 
 export default function Login() {
   const navigate = useNavigate();
+  const { t, i18n } = useTranslation();
   const setSession = useAuth((s) => s.setSession);
   const [phone, setPhone] = useState('+966');
   const [stage, setStage] = useState<'phone' | 'code'>('phone');
@@ -75,10 +79,24 @@ export default function Login() {
   return (
     <div className="page" style={{ display: 'grid', placeItems: 'center', minHeight: '90dvh' }}>
       <div className="card" style={{ width: '100%', maxWidth: 360, textAlign: 'center' }}>
-        <h1>Tailonix</h1>
+        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <select
+            aria-label="Language"
+            value={i18n.language.split('-')[0]}
+            onChange={(e) => void i18n.changeLanguage(e.target.value)}
+            style={{ border: 'none', background: 'transparent', color: 'var(--color-grey)' }}
+          >
+            {SUPPORTED_LANGUAGES.map((l) => (
+              <option key={l} value={l}>
+                {LANGUAGE_LABELS[l]}
+              </option>
+            ))}
+          </select>
+        </div>
+        <h1>{t('app.name')}</h1>
         {stage === 'phone' ? (
           <>
-            <p className="muted">Track your orders and book appointments</p>
+            <p className="muted">{t('app.tagline')}</p>
             <input
               className="input"
               type="tel"
@@ -90,18 +108,18 @@ export default function Login() {
             />
             {error && <p className="error-text">{error}</p>}
             <button className="btn" disabled={busy || !/^\+[1-9]\d{7,14}$/.test(phone)} onClick={() => void requestOtp()}>
-              {busy ? 'Sending…' : 'Send OTP'}
+              {busy ? t('login.sending') : t('login.sendOtp')}
             </button>
             <p className="muted" style={{ marginBlockStart: 10 }}>
-              We'll text you a {OTP_LENGTH}-digit code.
+              {t('login.codeHint', { length: OTP_LENGTH })}
             </p>
           </>
         ) : (
           <>
             <p className="muted">
-              Enter the code sent to <b>{phone}</b>
+              {t('login.enterCodeSentTo')} <b dir="ltr">{phone}</b>
             </p>
-            <div className="otp-row" style={{ marginBlock: 16 }}>
+            <div className="otp-row" style={{ marginBlock: 16 }} dir="ltr">
               {digits.map((d, i) => (
                 <input
                   key={i}
@@ -124,7 +142,9 @@ export default function Login() {
               disabled={resendIn > 0 || busy}
               onClick={() => void requestOtp()}
             >
-              {resendIn > 0 ? `Resend in 0:${String(resendIn).padStart(2, '0')}` : 'Resend code'}
+              {resendIn > 0
+                ? t('login.resendIn', { seconds: String(resendIn).padStart(2, '0') })
+                : t('login.resend')}
             </button>
           </>
         )}

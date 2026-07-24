@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { PlusOutlined } from '@ant-design/icons';
 import { Button, Input, Select, Space, Table, Tag, Typography, message } from 'antd';
 import dayjs from 'dayjs';
+import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router-dom';
 import { ORDER_STATUSES } from '@tailonix/shared';
 import { api, errMsg } from '../api/client';
@@ -31,6 +32,7 @@ interface OrderRow {
 
 export default function Orders() {
   const { activeStoreId } = useAuthStore();
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [rows, setRows] = useState<OrderRow[]>([]);
   const [total, setTotal] = useState(0);
@@ -60,9 +62,7 @@ export default function Orders() {
 
   if (!storeSelected) {
     return (
-      <Typography.Paragraph type="secondary">
-        Select a store from the switcher above to view its orders.
-      </Typography.Paragraph>
+      <Typography.Paragraph type="secondary">{t('app.selectStorePrompt')}</Typography.Paragraph>
     );
   }
 
@@ -71,7 +71,7 @@ export default function Orders() {
       <Space style={{ width: '100%', justifyContent: 'space-between' }} wrap>
         <Space wrap>
           <Input.Search
-            placeholder="Order #, customer, phone…"
+            placeholder={t('order.searchPlaceholder')}
             allowClear
             onSearch={(v) => {
               setPage(1);
@@ -80,10 +80,10 @@ export default function Orders() {
             style={{ width: 260 }}
           />
           <Select
-            placeholder="Status"
+            placeholder={t('app.status')}
             allowClear
             style={{ width: 140 }}
-            options={ORDER_STATUSES.map((s) => ({ value: s, label: s }))}
+            options={ORDER_STATUSES.map((s) => ({ value: s, label: t(`status.${s}`, s) }))}
             onChange={(v) => {
               setPage(1);
               setStatus(v);
@@ -91,7 +91,7 @@ export default function Orders() {
           />
         </Space>
         <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/orders/new')}>
-          New Order
+          {t('order.newOrder')}
         </Button>
       </Space>
       <Table
@@ -102,27 +102,27 @@ export default function Orders() {
         onRow={(r) => ({ style: { cursor: 'pointer' }, onClick: () => navigate(`/orders/${r.id}`) })}
         columns={[
           {
-            title: 'Order #',
+            title: t('order.orderNumber'),
             dataIndex: 'orderNumber',
             render: (v: string, r) => <Link to={`/orders/${r.id}`}>{v}</Link>,
           },
-          { title: 'Customer', render: (_, r) => r.customer.fullName },
+          { title: t('order.customer'), render: (_, r) => r.customer.fullName },
           {
-            title: 'Items',
+            title: t('order.items'),
             render: (_, r) => r.items.map((i) => `${i.quantity}× ${i.garmentType}`).join(', '),
           },
           {
-            title: 'Status',
+            title: t('app.status'),
             dataIndex: 'status',
-            render: (v: string) => <Tag color={ORDER_STATUS_COLORS[v]}>{v}</Tag>,
+            render: (v: string) => <Tag color={ORDER_STATUS_COLORS[v]}>{t(`status.${v}`, v)}</Tag>,
           },
-          { title: 'Total (SAR)', dataIndex: 'totalAmount' },
+          { title: `${t('order.total')} (SAR)`, dataIndex: 'totalAmount' },
           {
-            title: 'Balance',
+            title: t('order.balance'),
             render: (_, r) => (Number(r.totalAmount) - Number(r.paidAmount)).toFixed(2),
           },
           {
-            title: 'Due',
+            title: t('order.due'),
             dataIndex: 'dueDate',
             render: (v: string | null) => (v ? dayjs(v).format('DD MMM') : '—'),
           },
