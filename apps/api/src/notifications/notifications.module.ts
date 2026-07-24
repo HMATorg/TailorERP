@@ -2,6 +2,7 @@ import { Module, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Queue } from 'bullmq';
 import { NotificationWorker } from './notification.worker';
+import { PushService } from './push.service';
 import { QUEUE_NAMES, WHATSAPP_QUEUE } from './queues';
 import { ReorderCronService } from './reorder-cron.service';
 import { WhatsappService } from './whatsapp.service';
@@ -30,10 +31,11 @@ const queueFactory = (name: string) => ({
   providers: [
     queueFactory(QUEUE_NAMES.whatsapp),
     WhatsappService,
+    PushService,
     NotificationWorker,
     ReorderCronService,
   ],
-  exports: [WHATSAPP_QUEUE, WhatsappService],
+  exports: [WHATSAPP_QUEUE, WhatsappService, PushService],
 })
 export class NotificationsModule implements OnModuleDestroy {
   async onModuleDestroy() {

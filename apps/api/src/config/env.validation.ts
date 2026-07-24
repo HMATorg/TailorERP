@@ -1,4 +1,4 @@
-import { plainToInstance } from 'class-transformer';
+import { instanceToPlain, plainToInstance } from 'class-transformer';
 import { IsIn, IsInt, IsOptional, IsString, Min, validateSync } from 'class-validator';
 
 class EnvVariables {
@@ -29,7 +29,7 @@ class EnvVariables {
   JWT_REFRESH_SECRET: string;
 }
 
-export function validateEnv(config: Record<string, unknown>): EnvVariables {
+export function validateEnv(config: Record<string, unknown>): Record<string, unknown> {
   const validated = plainToInstance(EnvVariables, config, {
     enableImplicitConversion: true,
   });
@@ -40,5 +40,8 @@ export function validateEnv(config: Record<string, unknown>): EnvVariables {
       .join('; ');
     throw new Error(`Invalid environment configuration — ${details}`);
   }
-  return validated;
+  // Nest replaces the whole config with whatever this returns, so undeclared
+  // vars (VAPID_*, TOKEN_ENCRYPTION_KEY, WHATSAPP_*, OTP_*) must be preserved —
+  // returning only the class instance silently drops them.
+  return { ...config, ...instanceToPlain(validated) };
 }

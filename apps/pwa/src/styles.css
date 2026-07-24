@@ -289,6 +289,26 @@ h1, h2, h3 {
   color: #fff;
 }
 
+/* Push opt-in bottom sheet (wireframes §3.6e) */
+.sheet {
+  position: fixed;
+  bottom: 60px;
+  inset-inline: 0;
+  max-width: 480px;
+  margin-inline: auto;
+  background: #fff;
+  border-start-start-radius: 16px;
+  border-start-end-radius: 16px;
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.15);
+  padding: 20px 16px;
+  z-index: 30;
+  animation: sheet-up 0.28s ease-out;
+}
+@keyframes sheet-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
 .offline-banner {
   background: #fff8e1;
   color: #8d6e00;

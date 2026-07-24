@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
 import { api, errMsg } from '../api';
+import PushOptIn from '../components/PushOptIn';
 
 interface Timeline {
   step: string;
@@ -122,6 +123,8 @@ export default function OrderTracking() {
       >
         💬
       </a>
+
+      <PushOptIn />
     </div>
   );
 }

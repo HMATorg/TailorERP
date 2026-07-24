@@ -10,6 +10,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { IsIn, IsOptional, IsString } from 'class-validator';
 import { TRACKING_STEPS } from '@tailonix/shared';
 import { AppointmentsService } from '../appointments/appointments.service';
@@ -39,7 +40,14 @@ export class CustomerController {
     private readonly prisma: PrismaService,
     private readonly appointments: AppointmentsService,
     private readonly availability: AvailabilityService,
+    private readonly config: ConfigService,
   ) {}
+
+  /** VAPID public key the PWA needs to create a push subscription. */
+  @Get('push-key')
+  pushKey() {
+    return { publicKey: this.config.get<string>('VAPID_PUBLIC_KEY') ?? null };
+  }
 
   @Get('orders')
   async myOrders(@CurrentUser() principal: AccessTokenPayload) {
