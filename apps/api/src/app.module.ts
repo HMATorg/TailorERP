@@ -1,0 +1,43 @@
+import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+import { validateEnv } from './config/env.validation';
+import { AppointmentsModule } from './appointments/appointments.module';
+import { AuditModule } from './audit/audit.module';
+import { AuthModule } from './auth/auth.module';
+import { CustomerModule } from './customer-api/customer.module';
+import { CustomersModule } from './customers/customers.module';
+import { DashboardModule } from './dashboard/dashboard.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { PlatformModule } from './platform/platform.module';
+import { PrismaModule } from './prisma/prisma.module';
+import { RedisModule } from './redis/redis.module';
+import { HealthModule } from './health/health.module';
+import { InventoryModule } from './inventory/inventory.module';
+import { OrdersModule } from './orders/orders.module';
+import { StoresModule } from './stores/stores.module';
+import { TeamModule } from './team/team.module';
+
+@Module({
+  imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+      validate: validateEnv,
+    }),
+    PrismaModule,
+    RedisModule,
+    AuditModule,
+    AuthModule,
+    StoresModule,
+    TeamModule,
+    InventoryModule,
+    OrdersModule,
+    AppointmentsModule,
+    CustomerModule,
+    CustomersModule,
+    DashboardModule,
+    NotificationsModule,
+    PlatformModule,
+    HealthModule,
+  ],
+})
+export class AppModule {}

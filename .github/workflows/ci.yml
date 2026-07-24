@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: tailonix
+          POSTGRES_PASSWORD: tailonix_dev
+          POSTGRES_DB: tailonix_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U tailonix"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+
+    env:
+      DATABASE_URL: postgresql://tailonix:tailonix_dev@localhost:5432/tailonix_test?schema=public
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
+      JWT_ACCESS_SECRET: ci-access-secret
+      JWT_REFRESH_SECRET: ci-refresh-secret
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run prisma:generate -w @tailonix/api
+      - run: npm run prisma:deploy -w @tailonix/api
+      - run: npm run lint --workspaces --if-present
+      - run: npm run test --workspaces --if-present
+      - run: npm run build

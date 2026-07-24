@@ -1,0 +1,115 @@
+import { useMemo } from 'react';
+import {
+  AppstoreOutlined,
+  BellOutlined,
+  CalendarOutlined,
+  DashboardOutlined,
+  InboxOutlined,
+  LogoutOutlined,
+  ShopOutlined,
+  ShoppingOutlined,
+  TeamOutlined,
+  UserOutlined,
+  WarningOutlined,
+} from '@ant-design/icons';
+import { Avatar, Dropdown, Layout, Menu, Space, Typography } from 'antd';
+import { Link, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import StoreSwitcher from '../components/StoreSwitcher';
+import { useAuthStore } from '../stores/auth';
+
+const { Header, Sider, Content } = Layout;
+
+export default function AppLayout() {
+  const { user, accessToken, logout } = useAuthStore();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const isHq = user?.orgRole === 'hq_admin';
+
+  const menuItems = useMemo(
+    () => [
+      { key: '/', icon: <DashboardOutlined />, label: <Link to="/">Dashboard</Link> },
+      { key: '/orders', icon: <ShoppingOutlined />, label: <Link to="/orders">Orders</Link> },
+      { key: '/customers', icon: <UserOutlined />, label: <Link to="/customers">Customers</Link> },
+      { key: '/inventory', icon: <InboxOutlined />, label: <Link to="/inventory">Inventory</Link> },
+      { key: '/alerts', icon: <WarningOutlined />, label: <Link to="/alerts">Stock Alerts</Link> },
+      { key: '/appointments', icon: <CalendarOutlined />, label: <Link to="/appointments">Appointments</Link> },
+      ...(isHq
+        ? [
+            { key: '/team', icon: <TeamOutlined />, label: <Link to="/team">Team</Link> },
+            { key: '/stores', icon: <ShopOutlined />, label: <Link to="/stores">Stores</Link> },
+          ]
+        : []),
+    ],
+    [isHq],
+  );
+
+  if (!accessToken) return <Navigate to="/login" replace />;
+
+  const selectedKey =
+    menuItems
+      .map((i) => i.key)
+      .filter((k) => k !== '/' && location.pathname.startsWith(k))
+      .sort((a, b) => b.length - a.length)[0] ?? '/';
+
+  return (
+    <Layout style={{ minHeight: '100vh' }}>
+      <Sider theme="light" width={220} breakpoint="lg" collapsedWidth={64}>
+        <div style={{ padding: '16px 20px', fontWeight: 700, fontSize: 18, color: '#00695C' }}>
+          Tailonix
+        </div>
+        <Menu mode="inline" selectedKeys={[selectedKey]} items={menuItems} style={{ borderInlineEnd: 0 }} />
+      </Sider>
+      <Layout>
+        <Header
+          style={{
+            background: '#fff',
+            padding: '0 24px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            borderBlockEnd: '1px solid #f0f0f0',
+            position: 'sticky',
+            top: 0,
+            zIndex: 10,
+          }}
+        >
+          <StoreSwitcher />
+          <Space size="large">
+            <BellOutlined style={{ fontSize: 18, color: '#757575' }} />
+            <Dropdown
+              menu={{
+                items: [
+                  {
+                    key: 'org',
+                    label: <Typography.Text type="secondary">{user?.organization.name}</Typography.Text>,
+                    disabled: true,
+                  },
+                  { type: 'divider' },
+                  {
+                    key: 'logout',
+                    icon: <LogoutOutlined />,
+                    label: 'Logout',
+                    onClick: () => {
+                      logout();
+                      navigate('/login');
+                    },
+                  },
+                ],
+              }}
+            >
+              <Space style={{ cursor: 'pointer' }}>
+                <Avatar style={{ background: '#00695C' }} icon={<AppstoreOutlined />}>
+                  {user?.fullName?.[0]}
+                </Avatar>
+                <span>{user?.fullName}</span>
+              </Space>
+            </Dropdown>
+          </Space>
+        </Header>
+        <Content style={{ padding: 24 }}>
+          <Outlet />
+        </Content>
+      </Layout>
+    </Layout>
+  );
+}

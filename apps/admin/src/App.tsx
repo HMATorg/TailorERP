@@ -1,0 +1,37 @@
+import { BrowserRouter, Route, Routes } from 'react-router-dom';
+import AppLayout from './layout/AppLayout';
+import Alerts from './pages/Alerts';
+import Appointments from './pages/Appointments';
+import BatchDetail from './pages/BatchDetail';
+import Customers from './pages/Customers';
+import Dashboard from './pages/Dashboard';
+import Inventory from './pages/Inventory';
+import Login from './pages/Login';
+import NewOrder from './pages/NewOrder';
+import OrderDetail from './pages/OrderDetail';
+import Orders from './pages/Orders';
+import Stores from './pages/Stores';
+import Team from './pages/Team';
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route element={<AppLayout />}>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/orders" element={<Orders />} />
+          <Route path="/orders/new" element={<NewOrder />} />
+          <Route path="/orders/:id" element={<OrderDetail />} />
+          <Route path="/customers" element={<Customers />} />
+          <Route path="/inventory" element={<Inventory />} />
+          <Route path="/inventory/:id" element={<BatchDetail />} />
+          <Route path="/alerts" element={<Alerts />} />
+          <Route path="/appointments" element={<Appointments />} />
+          <Route path="/team" element={<Team />} />
+          <Route path="/stores" element={<Stores />} />
+        </Route>
+      </Routes>
+    </BrowserRouter>
+  );
+}

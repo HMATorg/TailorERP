@@ -1,0 +1,48 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: tailonix-postgres
+    environment:
+      POSTGRES_USER: tailonix
+      POSTGRES_PASSWORD: tailonix_dev
+      POSTGRES_DB: tailonix
+    ports:
+      - "5436:5432" # non-default host port: 5432-5435 are used by other projects on this machine
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tailonix"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: tailonix-redis
+    ports:
+      - "6380:6379" # 6379 is taken by another project's Redis on this machine
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    container_name: tailonix-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: tailonix
+      MINIO_ROOT_PASSWORD: tailonix_dev
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - miniodata:/data
+
+volumes:
+  pgdata:
+  redisdata:
+  miniodata:
