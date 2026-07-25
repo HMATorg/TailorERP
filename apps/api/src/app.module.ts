@@ -4,6 +4,7 @@ import { validateEnv } from './config/env.validation';
 import { AppointmentsModule } from './appointments/appointments.module';
 import { AuditModule } from './audit/audit.module';
 import { AuthModule } from './auth/auth.module';
+import { LedgerModule } from './ledger/ledger.module';
 import { PosModule } from './pos/pos.module';
 import { WorkshopModule } from './workshop/workshop.module';
 import { ZatcaModule } from './zatca/zatca.module';
@@ -46,6 +47,7 @@ import { TeamModule } from './team/team.module';
     NotificationsModule,
     PlatformModule,
     BillingModule,
+    LedgerModule,
     PosModule,
     WorkshopModule,
     ZatcaModule,

@@ -182,6 +182,30 @@ enum PaymentKind {
   refund
 }
 
+// ──────────────── v4: double-entry ledger (Phase 3 §2) ────────────────
+
+enum AccountType {
+  asset
+  liability
+  equity
+  revenue
+  expense
+}
+
+/// Normal balance side. Assets/expenses increase with debits; liabilities,
+/// equity and revenue increase with credits.
+enum NormalBalance {
+  debit
+  credit
+}
+
+enum JournalSource {
+  deposit
+  settlement
+  refund
+  adjustment
+}
+
 // ─────────────────────── Organization & Stores ───────────────────────
 
 model Organization {
@@ -212,6 +236,8 @@ model Organization {
   invoices         Invoice[]
   whatsappMessages WhatsappMessage[]
   auditLogs        AuditLog[]
+  ledgerAccounts   LedgerAccount[]
+  journalEntries   JournalEntry[]
 
   @@map("organizations")
 }
@@ -278,6 +304,7 @@ model User {
   notifications      Notification[]
   ticketsAssigned    ProductionTicket[]        @relation("TicketAssignee")
   ticketChanges      ProductionTicketHistory[] @relation("TicketHistoryActor")
+  journalEntries     JournalEntry[]           @relation("JournalPostedBy")
 
   @@index([organizationId])
   @@map("users")
@@ -833,6 +860,74 @@ model Invoice {
   @@unique([organizationId, icv])
   @@index([organizationId, submissionStatus])
   @@map("invoices")
+}
+
+/// Chart of accounts, per organisation (v4 Phase 3 §2).
+model LedgerAccount {
+  id             String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String        @map("organization_id") @db.Uuid
+  /// Stable machine key the posting rules reference, e.g. 'cash_on_hand'
+  code           String        @db.VarChar(50)
+  name           String        @db.VarChar(255)
+  nameAr         String?       @map("name_ar") @db.VarChar(255)
+  type           AccountType
+  normalBalance  NormalBalance @map("normal_balance")
+  isSystem       Boolean       @default(true) @map("is_system")
+  createdAt      DateTime      @default(now()) @map("created_at")
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  lines        LedgerLine[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, type])
+  @@map("ledger_accounts")
+}
+
+/// A balanced journal entry. Its lines must sum debits == credits, enforced in
+/// LedgerService and asserted by a CHECK on the stored totals.
+model JournalEntry {
+  id             String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String        @map("organization_id") @db.Uuid
+  storeId        String?       @map("store_id") @db.Uuid
+  /// Sequential per organisation — a gap means an entry was deleted
+  entryNumber    Int           @map("entry_number")
+  source         JournalSource
+  /// What triggered this: an order, a payment…
+  referenceType  String?       @map("reference_type") @db.VarChar(50)
+  referenceId    String?       @map("reference_id") @db.Uuid
+  memo           String?
+  totalDebit     Decimal       @map("total_debit") @db.Decimal(14, 2)
+  totalCredit    Decimal       @map("total_credit") @db.Decimal(14, 2)
+  postedAt       DateTime      @default(now()) @map("posted_at")
+  postedById     String?       @map("posted_by") @db.Uuid
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  postedBy     User?        @relation("JournalPostedBy", fields: [postedById], references: [id])
+  lines        LedgerLine[]
+
+  @@unique([organizationId, entryNumber])
+  @@index([organizationId, postedAt])
+  @@index([referenceType, referenceId])
+  @@index([storeId])
+  @@index([postedById])
+  @@map("journal_entries")
+}
+
+model LedgerLine {
+  id        String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  entryId   String  @map("entry_id") @db.Uuid
+  accountId String  @map("account_id") @db.Uuid
+  /// Exactly one of debit/credit is non-zero on any given line
+  debit     Decimal @default(0) @db.Decimal(14, 2)
+  credit    Decimal @default(0) @db.Decimal(14, 2)
+  memo      String?
+
+  entry   JournalEntry  @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  account LedgerAccount @relation(fields: [accountId], references: [id])
+
+  @@index([entryId])
+  @@index([accountId])
+  @@map("ledger_lines")
 }
 
 // ─────────────────────────── WhatsApp ────────────────────────────────

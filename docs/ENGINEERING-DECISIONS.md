@@ -383,6 +383,37 @@ as filed when it was not.
   database. Only rendering the receipt exposed it. Assertions now cover the *response*
   `paidAmount`/`balanceDue`, not just the persisted values.
 
+## D-036: The blueprint states the deposit posting backwards
+
+- **The source document says:** *"logs the incoming cash as a **credit** to Cash on Hand
+  and a **debit** to Unearned Revenue Liabilities."*
+- **That is inverted.** Cash is an asset and increases with a **debit**; Unearned Revenue
+  is a liability and increases with a **credit**. Implemented literally, taking a deposit
+  would *reduce* recorded cash and *reduce* the liability — the opposite of what happened,
+  and a ledger no auditor would accept.
+- **Implemented correctly:**
+  - Deposit: `Dr Cash/Card` · `Cr Unearned Revenue` · `Cr VAT Payable`
+  - Handover: `Dr Cash` + `Dr Unearned Revenue` · `Cr Sales Revenue` · `Cr VAT Payable`
+- Deposits are a **liability**, not revenue — the shop owes a thobe, and nothing is
+  earned until collection. This is the substance of the blueprint's intent even though
+  its debits and credits are swapped.
+- Enforced structurally: `CHECK (total_debit = total_credit)` on entries and
+  `CHECK` one-sidedness on lines, so no code path can post an unbalanced entry.
+
+## D-037: VAT on split payments is a remainder, not a per-payment split
+
+- **Problem caught by a test I wrote to document behaviour.** Splitting a SAR 400 order
+  into two SAR 200 payments and computing VAT independently each time yields
+  26.09 + 26.09 = **52.18**, while the invoice says **52.17**.
+- One halala per split order sounds trivial until it is thousands of orders: VAT Payable
+  would be systematically overstated and would never reconcile against the ZATCA filing.
+- **Decision:** the settling entry derives VAT as `orderVat − vatAlreadyPosted` rather
+  than splitting the balance independently. Any rounding drift is absorbed into Sales
+  Revenue so the entry still balances while **VAT stays exactly reconcilable to the
+  invoice** — the number the tax authority checks.
+- Verified live: deposit 26.09 + settlement 26.08 = 52.17, trial balance balanced,
+  Unearned Revenue discharged to zero.
+
 ## D-014: Validation library
 
 - **Decision:** `class-validator` + `class-transformer` DTOs (canonical NestJS style) rather

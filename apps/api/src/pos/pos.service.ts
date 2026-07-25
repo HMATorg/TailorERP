@@ -9,6 +9,7 @@ import { AuditService } from '../audit/audit.service';
 import { ReservationService } from '../inventory/reservation.service';
 import { YieldService } from '../inventory/yield.service';
 import { InvoicesService } from '../invoices/invoices.service';
+import { LedgerService } from '../ledger/ledger.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { WorkshopService } from '../workshop/workshop.service';
 import { ZatcaService } from '../zatca/zatca.service';
@@ -33,6 +34,7 @@ export class PosService {
     private readonly workshop: WorkshopService,
     private readonly invoices: InvoicesService,
     private readonly zatca: ZatcaService,
+    private readonly ledger: LedgerService,
     private readonly audit: AuditService,
   ) {}
 
@@ -217,6 +219,18 @@ export class PosService {
           where: { id: created.id },
           data: { paidAmount: dto.depositAmount },
         });
+
+        // A deposit is a liability, not revenue — nothing is earned until the
+        // customer collects (v4 Phase 3 §2, D-036).
+        await this.ledger.postDeposit(tx, {
+          organizationId: orgId,
+          storeId,
+          orderId: created.id,
+          orderNumber: created.orderNumber,
+          amount: dto.depositAmount,
+          method: dto.depositMethod ?? 'card',
+          postedById: userId,
+        });
       }
 
       await tx.orderStatusHistory.create({
@@ -303,8 +317,16 @@ export class PosService {
       );
     }
 
-    const [created] = await this.prisma.$transaction([
-      this.prisma.payment.create({
+    const deposits = order.payments
+      .filter((p) => p.kind === 'deposit')
+      .reduce((sum, p) => sum.plus(p.amount), new Prisma.Decimal(0));
+
+    // Only release the deposit from liability once, on the payment that closes
+    // the order — a partial settlement leaves it held.
+    const closesOrder = balance.minus(payment).isZero();
+
+    const created = await this.prisma.$transaction(async (tx) => {
+      const receipt = await tx.payment.create({
         data: {
           orderId,
           amount: payment,
@@ -312,16 +334,24 @@ export class PosService {
           kind: 'settlement',
           receivedById: userId,
         },
-      }),
-      this.prisma.order.update({
+      });
+      await tx.order.update({
         where: { id: orderId },
         data: { paidAmount: paid.plus(payment) },
-      }),
-    ]);
-
-    const deposits = order.payments
-      .filter((p) => p.kind === 'deposit')
-      .reduce((sum, p) => sum.plus(p.amount), new Prisma.Decimal(0));
+      });
+      await this.ledger.postSettlement(tx, {
+        organizationId: order.organizationId,
+        storeId,
+        orderId,
+        orderNumber: order.orderNumber,
+        amount: payment,
+        depositApplied: closesOrder ? deposits : 0,
+        orderTotal: order.totalAmount,
+        method: method ?? 'cash',
+        postedById: userId,
+      });
+      return receipt;
+    });
 
     await this.audit.log({
       storeId,
