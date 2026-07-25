@@ -6,9 +6,10 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Job, Worker } from 'bullmq';
+import { InvoicesService } from '../invoices/invoices.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from './push.service';
-import { QUEUE_NAMES, type OrderStatusChangedJob } from './queues';
+import { QUEUE_NAMES, type NotificationJob, type OrderStatusChangedJob } from './queues';
 import { WhatsappService } from './whatsapp.service';
 
 const STATUS_TEMPLATES: Record<string, { template: string; type: string }> = {
@@ -52,12 +53,13 @@ export class NotificationWorker implements OnModuleInit, OnModuleDestroy {
     private readonly config: ConfigService,
     private readonly whatsapp: WhatsappService,
     private readonly push: PushService,
+    private readonly invoices: InvoicesService,
   ) {}
 
   onModuleInit() {
     this.worker = new Worker(
       QUEUE_NAMES.whatsapp,
-      (job) => this.process(job as Job<OrderStatusChangedJob>),
+      (job) => this.route(job as Job<NotificationJob>),
       {
         connection: {
           host: this.config.get<string>('REDIS_HOST', 'localhost'),
@@ -75,10 +77,64 @@ export class NotificationWorker implements OnModuleInit, OnModuleDestroy {
     await this.worker?.close();
   }
 
-  private async process(job: Job<OrderStatusChangedJob>): Promise<void> {
-    const data = job.data;
-    if (data.kind !== 'order.status.changed') return;
+  private async route(job: Job<NotificationJob>): Promise<void> {
+    switch (job.data.kind) {
+      case 'order.status.changed':
+        return this.processStatusChange(job.data);
+      case 'invoice.requested':
+        return this.processInvoice(job.data);
+      default:
+        return;
+    }
+  }
 
+  /** Generates the invoice and delivers it over WhatsApp (PRD W-3). */
+  private async processInvoice(data: {
+    orderId: string;
+    organizationId: string;
+    storeId: string;
+    customerId: string;
+    orderNumber: string;
+  }): Promise<void> {
+    const invoice = await this.invoices.createForOrder(data.orderId);
+
+    const customer = await this.prisma.customer.findUnique({
+      where: { id: data.customerId },
+      select: { whatsappConsent: true, whatsappPhone: true, phone: true, language: true },
+    });
+    if (!customer?.whatsappConsent) {
+      this.logger.log(
+        `Invoice ${invoice.invoiceNumber} generated; customer has no WhatsApp consent — not sent`,
+      );
+      return;
+    }
+
+    const { buffer, filename } = await this.invoices.renderPdf(
+      data.organizationId,
+      invoice.id,
+    );
+    const caption =
+      customer.language === 'ar'
+        ? `فاتورة الطلب ${data.orderNumber}`
+        : `Invoice for order ${data.orderNumber}`;
+
+    await this.whatsapp.sendDocument({
+      organizationId: data.organizationId,
+      storeId: data.storeId,
+      customerId: data.customerId,
+      orderId: data.orderId,
+      toPhone: customer.whatsappPhone ?? customer.phone,
+      filename,
+      pdf: buffer,
+      caption,
+    });
+    await this.prisma.invoice.update({
+      where: { id: invoice.id },
+      data: { sentViaWhatsappAt: new Date() },
+    });
+  }
+
+  private async processStatusChange(data: OrderStatusChangedJob): Promise<void> {
     const mapping = STATUS_TEMPLATES[data.toStatus];
     if (!mapping) return; // e.g. pending/cancelled — no proactive message
 

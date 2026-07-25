@@ -1,6 +1,10 @@
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import type { Queue } from 'bullmq';
-import { WHATSAPP_QUEUE, type OrderStatusChangedJob } from '../notifications/queues';
+import {
+  WHATSAPP_QUEUE,
+  type InvoiceRequestedJob,
+  type OrderStatusChangedJob,
+} from '../notifications/queues';
 
 export interface OrderStatusChangedEvent {
   orderId: string;
@@ -32,6 +36,20 @@ export class OrderEventsPublisher {
       this.logger.log(
         `queued order.status.changed ${event.orderNumber}: ${event.fromStatus ?? '∅'} → ${event.toStatus}`,
       );
+
+      // Delivery closes the order: invoice it and send the PDF (PRD W-3)
+      if (event.toStatus === 'delivered') {
+        const invoiceJob: InvoiceRequestedJob = {
+          kind: 'invoice.requested',
+          orderId: event.orderId,
+          organizationId: event.organizationId,
+          storeId: event.storeId,
+          customerId: event.customerId,
+          orderNumber: event.orderNumber,
+        };
+        await this.whatsappQueue?.add('invoice.requested', invoiceJob);
+        this.logger.log(`queued invoice.requested for ${event.orderNumber}`);
+      }
     } catch (err) {
       this.logger.error(
         `Failed to queue notification for ${event.orderNumber}: ${(err as Error).message}`,

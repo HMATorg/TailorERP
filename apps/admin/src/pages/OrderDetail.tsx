@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { FilePdfOutlined } from '@ant-design/icons';
 import {
   Button,
   Card,
@@ -18,6 +19,7 @@ import {
   message,
 } from 'antd';
 import dayjs from 'dayjs';
+import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
 import { ORDER_STATUS_TRANSITIONS, TRACKING_STEPS, type OrderStatus } from '@tailonix/shared';
 import { api, errMsg } from '../api/client';
@@ -49,9 +51,11 @@ interface OrderDetailData {
 
 export default function OrderDetail() {
   const { id } = useParams();
+  const { t } = useTranslation();
   const [order, setOrder] = useState<OrderDetailData | null>(null);
   const [payOpen, setPayOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [invoiceBusy, setInvoiceBusy] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -72,6 +76,27 @@ export default function OrderDetail() {
   const balance = (Number(order.totalAmount) - Number(order.paidAmount)).toFixed(2);
   const reachedAt = new Map(order.statusHistory.map((h) => [h.toStatus, h.createdAt]));
   const stepIndex = TRACKING_STEPS.indexOf(order.status);
+
+  /** Creates the invoice if needed, then downloads the PDF. */
+  const downloadInvoice = async () => {
+    setInvoiceBusy(true);
+    try {
+      const { data: invoice } = await api.post(`/invoices/orders/${order.id}`);
+      const { data } = await api.get(`/invoices/${invoice.id}/download`, {
+        responseType: 'blob',
+      });
+      const url = URL.createObjectURL(data as Blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${invoice.invoiceNumber}.pdf`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      message.error(errMsg(e));
+    } finally {
+      setInvoiceBusy(false);
+    }
+  };
 
   const changeStatus = async (status: OrderStatus) => {
     setBusy(true);
@@ -96,6 +121,9 @@ export default function OrderDetail() {
           </Tag>
         </Typography.Title>
         <Space wrap>
+          <Button icon={<FilePdfOutlined />} loading={invoiceBusy} onClick={() => void downloadInvoice()}>
+            {t('order.invoice')}
+          </Button>
           {nextStatuses.map((s) =>
             s === 'cancelled' ? (
               <Popconfirm key={s} title="Cancel this order?" onConfirm={() => changeStatus(s)}>
@@ -119,13 +147,13 @@ export default function OrderDetail() {
             current={order.status === 'delivered' ? TRACKING_STEPS.length : stepIndex}
             items={[
               ...TRACKING_STEPS.map((step) => ({
-                title: step,
+                title: t(`status.${step}`, step),
                 description: reachedAt.has(step)
                   ? dayjs(reachedAt.get(step)).format('DD MMM HH:mm')
                   : undefined,
               })),
               {
-                title: 'delivered',
+                title: t('status.delivered'),
                 description: reachedAt.has('delivered')
                   ? dayjs(reachedAt.get('delivered')).format('DD MMM HH:mm')
                   : undefined,

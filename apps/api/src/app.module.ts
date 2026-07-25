@@ -14,7 +14,9 @@ import { PrismaModule } from './prisma/prisma.module';
 import { RedisModule } from './redis/redis.module';
 import { HealthModule } from './health/health.module';
 import { InventoryModule } from './inventory/inventory.module';
+import { InvoicesModule } from './invoices/invoices.module';
 import { OrdersModule } from './orders/orders.module';
+import { StorageModule } from './storage/storage.module';
 import { StoresModule } from './stores/stores.module';
 import { TeamModule } from './team/team.module';
 
@@ -27,10 +29,12 @@ import { TeamModule } from './team/team.module';
     PrismaModule,
     RedisModule,
     AuditModule,
+    StorageModule,
     AuthModule,
     StoresModule,
     TeamModule,
     InventoryModule,
+    InvoicesModule,
     OrdersModule,
     AppointmentsModule,
     CustomerModule,

@@ -202,6 +202,37 @@ npm workspaces (no pnpm dependency on dev machines). Node 24, TypeScript 5 stric
   do not use Stripe fully functional. Webhooks without a valid signature are rejected
   **400 before any parsing** — the signature is the only authentication that endpoint has.
 
+## D-021: Invoice PDFs are Latin-only for now
+
+- **Constraint:** PDFKit's built-in fonts are WinAnsi-encoded and cannot *shape*
+  Arabic — glyphs would render disconnected and left-to-right. Correct Arabic output
+  needs an embedded OpenType font plus a bidi/shaping pass (e.g. `harfbuzzjs`).
+- **Decision:** Ship the Latin/numeric invoice layout for all languages now. Names
+  entered in Arabic will render as boxes; the amounts, dates, and reference numbers —
+  the parts that matter legally — are correct in every locale.
+- **To do properly later:** embed Noto Naskh Arabic (or Tajawal) via `doc.font()`,
+  add shaping, and mirror the layout. Tracked as a follow-up, not a silent gap.
+
+## D-022: Invoices are generated, not stored-and-served
+
+- **Decision:** The PDF is rendered fresh on each download (`GET /invoices/:id/download`)
+  rather than served from S3. A copy is *also* pushed to S3 at creation for the
+  WhatsApp send and for a shareable presigned link.
+- **Rationale:** Regeneration keeps the document consistent with the order if line
+  items are corrected, and means the download path works even when object storage is
+  unavailable — which is the common case in local dev and self-hosted installs.
+- The `invoices` row (number, total, timestamps) is the durable record; the file is a
+  render of it.
+
+## D-023: Invoicing triggers on delivery
+
+- `order.status.changed → delivered` enqueues `invoice.requested` on the same queue as
+  notifications. The worker creates the invoice (idempotently — an order already
+  invoiced returns the existing row) and, if the customer consented, sends the PDF as a
+  WhatsApp **document**: upload bytes to Meta's `/media` endpoint, then reference the
+  returned media ID in the message (two calls, per TRD §5.5).
+- Staff can also invoice on demand from the order screen before delivery.
+
 ## D-014: Validation library
 
 - **Decision:** `class-validator` + `class-transformer` DTOs (canonical NestJS style) rather

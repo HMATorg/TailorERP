@@ -91,7 +91,8 @@
     "paidInFull": "مدفوع بالكامل",
     "statusUpdated": "تم تحديث الحالة إلى {{status}}",
     "created": "تم إنشاء الطلب {{number}}",
-    "searchPlaceholder": "رقم الطلب، العميل، الهاتف…"
+    "searchPlaceholder": "رقم الطلب، العميل، الهاتف…",
+    "invoice": "فاتورة PDF"
   },
   "status": {
     "pending": "قيد الانتظار",

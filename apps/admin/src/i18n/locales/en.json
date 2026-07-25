@@ -91,7 +91,8 @@
     "paidInFull": "Paid in full",
     "statusUpdated": "Status updated to {{status}}",
     "created": "Order {{number}} created",
-    "searchPlaceholder": "Order #, customer, phone…"
+    "searchPlaceholder": "Order #, customer, phone…",
+    "invoice": "Invoice PDF"
   },
   "status": {
     "pending": "Pending",
