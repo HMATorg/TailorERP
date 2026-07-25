@@ -2,7 +2,7 @@
   "name": "tailonix",
   "version": "0.1.0",
   "private": true,
-  "description": "Tailonix – full-stack retail operating system for tailoring chains (Gulf region)",
+  "description": "Tailonix \u2013 full-stack retail operating system for tailoring chains (Gulf region)",
   "workspaces": [
     "apps/*",
     "packages/*"
@@ -12,14 +12,15 @@
     "dev:admin": "npm run dev -w @tailonix/admin",
     "dev:pwa": "npm run dev -w @tailonix/pwa",
     "dev:platform-admin": "npm run dev -w @tailonix/platform-admin",
-    "build": "npm run build -w @tailonix/shared && npm run build -w @tailonix/api && npm run build -w @tailonix/admin && npm run build -w @tailonix/pwa && npm run build -w @tailonix/platform-admin",
+    "build": "npm run build -w @tailonix/shared && npm run build -w @tailonix/api && npm run build -w @tailonix/admin && npm run build -w @tailonix/pwa && npm run build -w @tailonix/platform-admin && npm run build -w @tailonix/pos",
     "postinstall": "npm run build -w @tailonix/shared",
     "test": "npm run test --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
     "db:migrate": "npm run prisma:migrate -w @tailonix/api",
     "db:seed": "npm run prisma:seed -w @tailonix/api",
     "infra:up": "docker compose up -d",
-    "infra:down": "docker compose down"
+    "infra:down": "docker compose down",
+    "dev:pos": "npm run dev -w @tailonix/pos"
   },
   "engines": {
     "node": ">=20"

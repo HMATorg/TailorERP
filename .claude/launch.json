@@ -4,20 +4,46 @@
     {
       "name": "admin",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "-w", "@tailonix/admin"],
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "-w",
+        "@tailonix/admin"
+      ],
       "port": 5173
     },
     {
       "name": "pwa",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "-w", "@tailonix/pwa"],
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "-w",
+        "@tailonix/pwa"
+      ],
       "port": 5174
     },
     {
       "name": "platform-admin",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "-w", "@tailonix/platform-admin"],
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "-w",
+        "@tailonix/platform-admin"
+      ],
       "port": 5175
+    },
+    {
+      "name": "pos",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "-w",
+        "@tailonix/pos"
+      ],
+      "port": 5176
     }
   ]
 }

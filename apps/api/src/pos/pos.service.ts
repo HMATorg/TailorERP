@@ -200,6 +200,7 @@ export class PosService {
         });
       }
 
+      let withDeposit = created;
       if (dto.depositAmount && dto.depositAmount > 0) {
         await tx.payment.create({
           data: {
@@ -210,7 +211,9 @@ export class PosService {
             receivedById: userId,
           },
         });
-        await tx.order.update({
+        // Capture the updated row — `created` was read before this write, and
+        // returning it would print a receipt showing the full amount still due.
+        withDeposit = await tx.order.update({
           where: { id: created.id },
           data: { paidAmount: dto.depositAmount },
         });
@@ -228,7 +231,7 @@ export class PosService {
         update: { lastVisitDate: new Date() },
         create: { customerId: dto.customerId, storeId },
       });
-      return created;
+      return withDeposit;
     });
 
     // Post-commit: tickets and the tax document. Deliberately outside the

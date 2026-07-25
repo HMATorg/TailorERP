@@ -358,6 +358,31 @@ as filed when it was not.
   invoice-numbering hiccup must not roll back a payment the customer already made; those
   steps are idempotent and retryable instead.
 
+## D-034: The POS is a separate app, not a section of the admin SPA
+
+- **Decision:** new `apps/pos` (port 5176) carrying both the counter flow and the
+  workshop board; the admin SPA stays a management tool.
+- **Rationale:** the blueprint puts front-of-house on its own tier, and the two
+  contexts genuinely differ — counter and workshop are touch/barcode devices with
+  48px controls, a permanently-focused scan field, and no sidebar navigation.
+  Folding them into the desk app would have compromised both.
+- Counter and workshop share one shell because a small shop runs both on the same
+  tablet; a segmented control switches between them.
+- On login the POS defaults to a **real store**, never the HQ "all stores" view —
+  that view cannot take an order, and silently landing there would be a dead end.
+
+## D-035: Returning a pre-update row printed the wrong balance
+
+- **Bug found by driving the UI, not by tests.** `checkout()` returned the order
+  object captured from `tx.order.create()`, then separately updated `paidAmount` for
+  the deposit. The response therefore reported `paidAmount: 0` while the database
+  correctly held 200 — the printed receipt told a customer who had just paid SAR 200
+  that the full SAR 400 was still due.
+- **Fix:** capture the row returned by the update and return that.
+- **Lesson worth keeping:** every unit test passed, and the e2e suite asserted the
+  database. Only rendering the receipt exposed it. Assertions now cover the *response*
+  `paidAmount`/`balanceDue`, not just the persisted values.
+
 ## D-014: Validation library
 
 - **Decision:** `class-validator` + `class-transformer` DTOs (canonical NestJS style) rather
