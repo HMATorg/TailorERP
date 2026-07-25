@@ -72,6 +72,19 @@ export class StorageService implements OnModuleInit {
     return key;
   }
 
+  /** Reads an object back — used by the ZATCA integrity re-hash. */
+  async getObject(key: string): Promise<Buffer> {
+    if (!this.client) throw new Error('Storage is not configured');
+    const res = await this.client.send(
+      new GetObjectCommand({ Bucket: this.bucket, Key: key }),
+    );
+    const chunks: Buffer[] = [];
+    for await (const chunk of res.Body as AsyncIterable<Uint8Array>) {
+      chunks.push(Buffer.from(chunk));
+    }
+    return Buffer.concat(chunks);
+  }
+
   /** Temporary download link — default 1 hour (TRD §5.3). */
   async getSignedDownloadUrl(key: string, expiresInSeconds = 3600): Promise<string> {
     if (!this.client) throw new Error('Storage is not configured');

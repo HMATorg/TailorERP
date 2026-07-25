@@ -2,11 +2,14 @@ import {
   IsBoolean,
   IsEmail,
   IsIn,
+  IsNumber,
   IsObject,
   IsOptional,
   IsString,
   Matches,
+  Max,
   MaxLength,
+  Min,
 } from 'class-validator';
 
 const E164 = /^\+[1-9]\d{7,14}$/;
@@ -49,14 +52,68 @@ export class UpdateCustomerDto extends CreateCustomerDto {
   declare phone: string;
 }
 
+/**
+ * Measurement matrix M1–M8 (v4 amendment §2). All values in CENTIMETRES.
+ * Saving creates a new version and deactivates the previous one, so cutters
+ * always read a single active frame.
+ */
 export class CreateMeasurementDto {
   @IsString()
   @MaxLength(100)
   garmentType: string;
 
-  /** e.g. { collar: 15.5, chest: 40, sleeve: 24 } — unit convention: inches */
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(400)
+  @IsOptional()
+  m1TotalLength?: number; // الطول
+
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(400)
+  @IsOptional()
+  m2ShoulderWidth?: number; // الكتف
+
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(400)
+  @IsOptional()
+  m3SleeveLength?: number; // الكم
+
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(400)
+  @IsOptional()
+  m4ChestCirc?: number; // الصدر
+
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(400)
+  @IsOptional()
+  m5HipWidth?: number; // الوسط
+
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(400)
+  @IsOptional()
+  m6NeckDiameter?: number; // الرقبة
+
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(400)
+  @IsOptional()
+  m7WristOpening?: number; // الوسع
+
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(400)
+  @IsOptional()
+  m8SkirtPerimeter?: number; // الذيل
+
+  /** Shop-specific points outside the standard matrix */
   @IsObject()
-  data: Record<string, number | string>;
+  @IsOptional()
+  extra?: Record<string, number | string>;
 
   @IsString()
   @IsOptional()

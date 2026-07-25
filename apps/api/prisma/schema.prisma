@@ -121,6 +121,67 @@ enum InvitationStatus {
   revoked
 }
 
+// ─────────────── v4 amendment: garment design variants ───────────────
+// Names follow the competitor blueprint's Saudi thobe terminology.
+
+enum CollarStyle {
+  qallabi_1_button
+  qallabi_2_button
+  rounded_sada
+  open_v_neck
+}
+
+enum CuffStyle {
+  formal_kabak // takes cufflinks
+  buttoned_sada
+}
+
+enum PocketStyle {
+  upper_left_patch
+  hidden_side
+  mobile_slot
+}
+
+enum StitchingStyle {
+  hidden_plain
+  visible_dual_sawai
+  embroidered_zari
+}
+
+/// Workshop stations (Kanban columns) — التفصيل / الخياطة / الكوي والجودة
+enum ProductionStation {
+  queued
+  cutting
+  stitching
+  quality
+  ready
+}
+
+enum ReservationStatus {
+  reserved
+  consumed
+  released
+}
+
+/// ZATCA distinguishes B2C (simplified) from B2B (standard) invoices.
+enum ZatcaInvoiceType {
+  simplified
+  standard
+}
+
+enum ZatcaSubmissionStatus {
+  pending
+  reported
+  cleared
+  failed
+}
+
+enum PaymentKind {
+  deposit
+  settlement
+  refund
+}
+
 // ─────────────────────── Organization & Stores ───────────────────────
 
 model Organization {
@@ -128,6 +189,12 @@ model Organization {
   name            String    @db.VarChar(255)
   logoUrl         String?   @map("logo_url")
   taxId           String?   @map("tax_id") @db.VarChar(100)
+  /// 15-digit KSA VAT registration number, required on ZATCA invoices
+  vatNumber       String?   @map("vat_number") @db.VarChar(20)
+  /// ZATCA-issued CSID + private key for cryptographic stamping (encrypted)
+  zatcaCsidEncrypted       String? @map("zatca_csid_encrypted")
+  zatcaPrivateKeyEncrypted String? @map("zatca_private_key_encrypted")
+  zatcaEnvironment String?  @map("zatca_environment") @db.VarChar(20)
   defaultCurrency String    @default("SAR") @map("default_currency") @db.VarChar(10)
   timezone        String    @default("Asia/Riyadh") @db.VarChar(50)
   status          OrgStatus @default(active)
@@ -176,6 +243,7 @@ model Store {
   orders             Order[]
   measurements       Measurement[]
   whatsappMessages   WhatsappMessage[]
+  productionTickets  ProductionTicket[]
 
   @@index([organizationId])
   @@map("stores")
@@ -208,6 +276,8 @@ model User {
   invitationsSent    Invitation[]            @relation("InvitationInvitedBy")
   auditLogs          AuditLog[]              @relation("AuditActor")
   notifications      Notification[]
+  ticketsAssigned    ProductionTicket[]        @relation("TicketAssignee")
+  ticketChanges      ProductionTicketHistory[] @relation("TicketHistoryActor")
 
   @@index([organizationId])
   @@map("users")
@@ -265,6 +335,8 @@ model Customer {
   whatsappPhone    String?  @map("whatsapp_phone") @db.VarChar(20)
   preferredStoreId String?  @map("preferred_store_id") @db.Uuid
   language         String   @default("en") @db.VarChar(5)
+  /// Lifetime garment count driving tier level (v4 amendment §1)
+  lifetimeOrderCount Int    @default(0) @map("lifetime_order_count")
   notes            String?
   isActive         Boolean  @default(true) @map("is_active")
   createdAt        DateTime @default(now()) @map("created_at")
@@ -316,22 +388,43 @@ model CustomerDevice {
   @@map("customer_devices")
 }
 
+/// Versioned measurement snapshot (v4 amendment §2). All dimensions in
+/// CENTIMETRES. Exactly one profile per customer+garmentType may be active —
+/// enforced by a partial unique index — so cutters always work from one frame.
 model Measurement {
   id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   customerId  String   @map("customer_id") @db.Uuid
   storeId     String?  @map("store_id") @db.Uuid
   garmentType String   @map("garment_type") @db.VarChar(100)
-  data        Json // { collar: 15.5, chest: 40, ... } unit: inches
+  /// Sequential snapshot version per customer+garmentType, starting at 1
+  version     Int      @default(1)
+  isActive    Boolean  @default(true) @map("is_active")
+
+  // Body measurement points matrix, cm (M1–M8)
+  m1TotalLength   Decimal? @map("m1_total_length") @db.Decimal(6, 2) // الطول
+  m2ShoulderWidth Decimal? @map("m2_shoulder_width") @db.Decimal(6, 2) // الكتف
+  m3SleeveLength  Decimal? @map("m3_sleeve_length") @db.Decimal(6, 2) // الكم
+  m4ChestCirc     Decimal? @map("m4_chest_circumference") @db.Decimal(6, 2) // الصدر
+  m5HipWidth      Decimal? @map("m5_hip_width") @db.Decimal(6, 2) // الوسط
+  m6NeckDiameter  Decimal? @map("m6_neck_diameter") @db.Decimal(6, 2) // الرقبة
+  m7WristOpening  Decimal? @map("m7_wrist_opening") @db.Decimal(6, 2) // الوسع
+  m8SkirtPerimeter Decimal? @map("m8_skirt_perimeter") @db.Decimal(6, 2) // الذيل
+
+  /// Any additional shop-specific points that do not fit the standard matrix
+  extra       Json?
   notes       String?
   takenById   String?  @map("taken_by") @db.Uuid
   createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at")
 
   customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
   store    Store?   @relation(fields: [storeId], references: [id])
   takenBy  User?    @relation("MeasurementTakenBy", fields: [takenById], references: [id])
   orderItems OrderItem[]
 
+  @@unique([customerId, garmentType, version])
   @@index([customerId, garmentType, createdAt])
+  @@index([customerId, isActive])
   @@index([storeId])
   @@index([takenById])
   @@map("measurements")
@@ -401,6 +494,21 @@ model InventoryBatch {
   expiryDate          DateTime?   @map("expiry_date") @db.Date
   storageLocation     String?     @map("storage_location") @db.VarChar(100)
   status              BatchStatus @default(available)
+
+  // ── v4 amendment §5: manufacturer trace + fractional roll control ──
+  /// Barcode on the physical shelf label
+  barcode        String? @db.VarChar(100)
+  brand          String? @db.VarChar(100)
+  /// e.g. "Toyobo Japan"
+  origin         String? @db.VarChar(100)
+  fabricTypeName String? @map("fabric_type") @db.VarChar(100)
+  colorShadeCode String? @map("color_shade_code") @db.VarChar(50)
+  /// Below this remainder the roll leaves storefront availability for adult
+  /// thobes — a sellability rule, distinct from the reorder threshold.
+  minUsableMeters Decimal @default(3.50) @map("min_usable_meters") @db.Decimal(12, 2)
+  /// Metres held for orders not yet cut; available = current − reserved
+  reservedQuantity Decimal @default(0) @map("reserved_quantity") @db.Decimal(12, 2)
+
   createdAt           DateTime    @default(now()) @map("created_at")
   updatedAt           DateTime    @default(now()) @updatedAt @map("updated_at")
 
@@ -408,9 +516,11 @@ model InventoryBatch {
   supplier  Supplier?           @relation(fields: [supplierId], references: [id])
   movements InventoryMovement[]
   orderItemFabrics OrderItemFabric[]
+  reservations FabricReservation[]
 
   // D-002: batch_code unique per store, NOT globally (transfers preserve codes)
   @@unique([storeId, batchCode])
+  @@index([storeId, barcode])
   // FIFO query path (TRD §9)
   @@index([storeId, fabricName, purchaseDate, status])
   @@index([supplierId])
@@ -475,6 +585,74 @@ model InventoryRestockAlert {
   @@map("inventory_restock_alerts")
 }
 
+/// Fabric held at checkout and deducted at the cutting station (v4 Phase 2).
+/// Reserving rather than deducting stops walk-in sales from consuming metres
+/// already promised to a production order.
+model FabricReservation {
+  id           String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  batchId      String            @map("batch_id") @db.Uuid
+  orderItemId  String            @map("order_item_id") @db.Uuid
+  meters       Decimal           @db.Decimal(12, 2)
+  status       ReservationStatus @default(reserved)
+  reservedById String?           @map("reserved_by") @db.Uuid
+  consumedAt   DateTime?         @map("consumed_at")
+  releasedAt   DateTime?         @map("released_at")
+  createdAt    DateTime          @default(now()) @map("created_at")
+
+  batch     InventoryBatch @relation(fields: [batchId], references: [id])
+  orderItem OrderItem      @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+
+  @@index([batchId, status])
+  @@index([orderItemId])
+  @@map("fabric_reservations")
+}
+
+/// One card per garment on the workshop Kanban (v4 Phase 4). A three-thobe
+/// order produces three tickets that move through stations independently.
+model ProductionTicket {
+  id           String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderId      String            @map("order_id") @db.Uuid
+  orderItemId  String            @unique @map("order_item_id") @db.Uuid
+  storeId      String            @map("store_id") @db.Uuid
+  /// Scanned at each station — printed on the physical card
+  ticketCode   String            @unique @map("ticket_code") @db.VarChar(50)
+  station      ProductionStation @default(queued)
+  assignedToId String?           @map("assigned_to") @db.Uuid
+  startedAt    DateTime?         @map("started_at")
+  completedAt  DateTime?         @map("completed_at")
+  notes        String?
+  createdAt    DateTime          @default(now()) @map("created_at")
+  updatedAt    DateTime          @default(now()) @updatedAt @map("updated_at")
+
+  order      Order                    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderItem  OrderItem                @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  store      Store                    @relation(fields: [storeId], references: [id])
+  assignedTo User?                    @relation("TicketAssignee", fields: [assignedToId], references: [id])
+  history    ProductionTicketHistory[]
+
+  @@index([storeId, station])
+  @@index([orderId])
+  @@index([assignedToId])
+  @@map("production_tickets")
+}
+
+model ProductionTicketHistory {
+  id          String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ticketId    String             @map("ticket_id") @db.Uuid
+  fromStation ProductionStation? @map("from_station")
+  toStation   ProductionStation  @map("to_station")
+  changedById String?            @map("changed_by") @db.Uuid
+  note        String?
+  createdAt   DateTime           @default(now()) @map("created_at")
+
+  ticket    ProductionTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  changedBy User?            @relation("TicketHistoryActor", fields: [changedById], references: [id])
+
+  @@index([ticketId, createdAt])
+  @@index([changedById])
+  @@map("production_ticket_history")
+}
+
 // ────────────────────────────── Orders ───────────────────────────────
 
 model Order {
@@ -504,6 +682,7 @@ model Order {
   invoice       Invoice?
   movements     InventoryMovement[]
   whatsappMessages WhatsappMessage[]
+  tickets       ProductionTicket[]
 
   @@unique([storeId, orderNumber])
   @@index([storeId, customerId, createdAt])
@@ -526,11 +705,26 @@ model OrderItem {
   quantity      Int      @default(1)
   unitPrice     Decimal  @default(0) @map("unit_price") @db.Decimal(12, 2)
   measurementId String?  @map("measurement_id") @db.Uuid
+
+  /// Position within the order — "Suit 1 of 3" (v4 amendment §4)
+  sequenceNo    Int      @default(1) @map("sequence_no")
+
+  // Design configuration flag vector — what the workshop actually builds
+  collarStyle    CollarStyle?    @map("collar_style")
+  cuffStyle      CuffStyle?      @map("cuff_style")
+  pocketStyle    PocketStyle?    @map("pocket_style")
+  stitchingStyle StitchingStyle? @map("stitching_style")
+
+  /// Fabric metres computed by the yield formula and held against a roll
+  yieldMeters   Decimal? @map("yield_meters") @db.Decimal(12, 2)
+
   createdAt     DateTime @default(now()) @map("created_at")
 
   order       Order             @relation(fields: [orderId], references: [id], onDelete: Cascade)
   measurement Measurement?      @relation(fields: [measurementId], references: [id])
   fabrics     OrderItemFabric[]
+  reservations FabricReservation[]
+  ticket      ProductionTicket?
 
   @@index([orderId])
   @@index([measurementId])
@@ -577,6 +771,8 @@ model Payment {
   orderId      String        @map("order_id") @db.Uuid
   amount       Decimal       @db.Decimal(12, 2)
   method       PaymentMethod @default(cash)
+  /// Deposits are a liability until the goods are handed over (v4 Phase 3)
+  kind         PaymentKind   @default(settlement)
   reference    String?       @db.VarChar(255)
   receivedById String?       @map("received_by") @db.Uuid
   createdAt    DateTime      @default(now()) @map("created_at")
@@ -589,12 +785,43 @@ model Payment {
   @@map("payments")
 }
 
+/// ZATCA Fatoora Phase 2 master file (v4 amendment §3).
+/// Amounts are stored net / VAT / gross explicitly — the regulation requires all
+/// three on the document, and deriving them at render time invites drift.
 model Invoice {
   id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   organizationId    String    @map("organization_id") @db.Uuid
   orderId           String    @unique @map("order_id") @db.Uuid
   invoiceNumber     String    @map("invoice_number") @db.VarChar(50)
+
+  // ── Tax block ──
+  /// Net of VAT
+  netAmount         Decimal   @default(0) @map("net_amount") @db.Decimal(12, 2)
+  /// 15% KSA standard rate at time of issue; stored, not assumed
+  vatRate           Decimal   @default(15.00) @map("vat_rate") @db.Decimal(5, 2)
+  vatAmount         Decimal   @default(0) @map("vat_amount") @db.Decimal(12, 2)
+  /// Gross = net + VAT. Kept as totalAmount for backwards compatibility.
   totalAmount       Decimal   @map("total_amount") @db.Decimal(12, 2)
+
+  // ── ZATCA compliance block ──
+  zatcaInvoiceType  ZatcaInvoiceType @default(simplified) @map("zatca_invoice_type")
+  /// Invoice UUID (distinct from our PK) carried in the UBL document
+  zatcaUuid         String?   @unique @map("zatca_uuid") @db.Uuid
+  /// Invoice Counter Value — monotonic per device, never reused
+  icv               Int?
+  /// SHA-256 of this invoice's canonical XML, base64
+  invoiceHash       String?   @map("invoice_hash") @db.VarChar(128)
+  /// Previous Invoice Hash — the chain link making the ledger tamper-evident
+  previousHash      String?   @map("previous_hash") @db.VarChar(128)
+  /// Base64 TLV payload rendered as the mandatory QR block
+  qrCodeBase64      String?   @map("qr_code_base64")
+  /// Signed UBL 2.1 document as submitted
+  xmlUrl            String?   @map("xml_url")
+  submissionStatus  ZatcaSubmissionStatus @default(pending) @map("submission_status")
+  submittedAt       DateTime? @map("submitted_at")
+  clearanceStatus   String?   @map("clearance_status") @db.VarChar(50)
+  zatcaResponse     Json?     @map("zatca_response")
+
   pdfUrl            String?   @map("pdf_url")
   issuedAt          DateTime  @default(now()) @map("issued_at")
   sentViaWhatsappAt DateTime? @map("sent_via_whatsapp_at")
@@ -603,6 +830,8 @@ model Invoice {
   order        Order        @relation(fields: [orderId], references: [id])
 
   @@unique([organizationId, invoiceNumber])
+  @@unique([organizationId, icv])
+  @@index([organizationId, submissionStatus])
   @@map("invoices")
 }
 

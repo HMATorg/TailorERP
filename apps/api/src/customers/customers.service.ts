@@ -160,15 +160,38 @@ export class CustomersService {
     });
     if (!customer) throw new NotFoundException('Customer not found');
 
-    return this.prisma.measurement.create({
-      data: {
-        customerId,
-        storeId,
-        garmentType: dto.garmentType,
-        data: dto.data as Prisma.InputJsonValue,
-        notes: dto.notes,
-        takenById: actorId,
-      },
+    // A new snapshot supersedes the previous one: deactivate then insert, in one
+    // transaction, or the partial unique index would reject the second active row.
+    return this.prisma.$transaction(async (tx) => {
+      const previous = await tx.measurement.findFirst({
+        where: { customerId, garmentType: dto.garmentType },
+        orderBy: { version: 'desc' },
+        select: { version: true },
+      });
+      await tx.measurement.updateMany({
+        where: { customerId, garmentType: dto.garmentType, isActive: true },
+        data: { isActive: false },
+      });
+      return tx.measurement.create({
+        data: {
+          customerId,
+          storeId,
+          garmentType: dto.garmentType,
+          version: (previous?.version ?? 0) + 1,
+          isActive: true,
+          m1TotalLength: dto.m1TotalLength,
+          m2ShoulderWidth: dto.m2ShoulderWidth,
+          m3SleeveLength: dto.m3SleeveLength,
+          m4ChestCirc: dto.m4ChestCirc,
+          m5HipWidth: dto.m5HipWidth,
+          m6NeckDiameter: dto.m6NeckDiameter,
+          m7WristOpening: dto.m7WristOpening,
+          m8SkirtPerimeter: dto.m8SkirtPerimeter,
+          extra: (dto.extra ?? undefined) as Prisma.InputJsonValue | undefined,
+          notes: dto.notes,
+          takenById: actorId,
+        },
+      });
     });
   }
 }

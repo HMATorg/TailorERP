@@ -279,6 +279,50 @@ npm workspaces (no pnpm dependency on dev machines). Node 24, TypeScript 5 stric
   already the leading column of a composite index. `@@index([storeId, customerId, …])`
   does **not** cover lookups by `customerId` — leading column only.
 
+## D-027: Measurements become a versioned matrix, enforced by the database
+
+- **Change (v4 §2):** free-form JSON → typed M1–M8 columns in **centimetres**, with
+  `version` and `isActive`.
+- **Enforcement:** a *partial unique index* `(customer_id, garment_type) WHERE is_active`
+  makes "exactly one active frame per garment" impossible to violate, rather than a rule
+  the application is trusted to remember. The blueprint is explicit that cutters must work
+  from a single valid template; that is a data-integrity requirement, not a UI concern.
+- **Migration is data-preserving:** legacy JSON is mapped into the typed columns
+  (inches → cm at 2.54) and the original payload is retained in `extra.legacyData`.
+  Dropping the column outright would have destroyed real shop data.
+
+## D-028: VAT is derived by subtraction, not by re-multiplication
+
+- KSA retail prices are quoted **VAT-inclusive**, and our order totals are what the
+  customer was quoted. So `splitInclusive` computes net = gross / 1.15, then
+  **vat = gross − net**.
+- **Why not compute VAT = net × 0.15?** Because rounding net first and then multiplying
+  can produce net + vat ≠ gross by one halala. The tax authority reconciles those three
+  numbers; they must agree exactly. A test asserts the identity across awkward amounts.
+
+## D-029: ZATCA Phase 2 — what is implemented and what needs onboarding
+
+**Implemented and tested:** 15% VAT split, invoice UUID, ICV (monotonic, allocated under
+`FOR UPDATE` so concurrent checkouts cannot collide), SHA-256 hash chain from the ZATCA
+genesis PIH, Base64 TLV QR (tags 1–6), UBL 2.1 XML, XML archived to object storage.
+
+**Requires the client's ZATCA credentials, not more code:** the cryptographic stamp
+(QR tags 7–9) needs a CSR submitted to ZATCA and a CSID issued for a *registered device*;
+Fatoora clearance/reporting then submits against that CSID. `submit()` returns
+`zatca_not_onboarded` rather than pretending success — an invoice must never be recorded
+as filed when it was not.
+
+## D-030: Compliance verification needs hash re-computation, not just chain linkage
+
+- **Found by testing, not by review.** Chain linkage alone (`previousHash[i] ===
+  invoiceHash[i-1]`) reports a *single* tampered invoice as intact — it has no successor
+  to contradict it, and an attacker who edits amounts can rewrite the stored hash too.
+- **Fix:** `verifyChain` now also re-reads the archived XML, re-hashes it, and compares.
+  Three independent checks — linkage, re-hash, ICV continuity — because each catches a
+  different tampering mode.
+- Invoices whose XML cannot be read are reported as `unverifiable` rather than counted as
+  passing. Absence of evidence is not evidence of integrity.
+
 ## D-014: Validation library
 
 - **Decision:** `class-validator` + `class-transformer` DTOs (canonical NestJS style) rather

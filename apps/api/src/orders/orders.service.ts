@@ -237,7 +237,7 @@ export class OrdersService {
                 batch: { select: { id: true, batchCode: true, fabricName: true, color: true } },
               },
             },
-            measurement: { select: { id: true, garmentType: true, data: true } },
+            measurement: { select: { id: true, garmentType: true, version: true } },
           },
         },
         statusHistory: {
