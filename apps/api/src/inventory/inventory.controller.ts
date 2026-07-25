@@ -22,12 +22,14 @@ import {
   UpsertReorderSettingDto,
 } from './dto/inventory.dto';
 import { InventoryService } from './inventory.service';
+import { ReservationService } from './reservation.service';
 
 @Controller('inventory')
 export class InventoryController {
   constructor(
     private readonly inventory: InventoryService,
     private readonly alerts: AlertsService,
+    private readonly reservations: ReservationService,
   ) {}
 
   @Post('batches')
@@ -39,6 +41,21 @@ export class InventoryController {
     @Ip() ip: string,
   ) {
     return this.inventory.createBatch(storeId, principal.sub, dto, ip);
+  }
+
+  /**
+   * Rolls that can supply `requiredMeters` and still stay above their minimum
+   * usable point (v4 Phase 2). This is what the POS fabric picker lists —
+   * offering a roll that would be stranded is the error we are preventing.
+   */
+  @Get('sellable')
+  @RequirePermissions('view_inventory')
+  sellable(
+    @CurrentStoreId() storeId: string,
+    @Query('requiredMeters') requiredMeters: string,
+    @Query('fabricName') fabricName?: string,
+  ) {
+    return this.reservations.sellableRolls(storeId, Number(requiredMeters ?? 0), fabricName);
   }
 
   @Get('batches')

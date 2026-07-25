@@ -1,0 +1,342 @@
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
+import { Prisma } from '@prisma/client';
+import { AuditService } from '../audit/audit.service';
+import { ReservationService } from '../inventory/reservation.service';
+import { YieldService } from '../inventory/yield.service';
+import { InvoicesService } from '../invoices/invoices.service';
+import { PrismaService } from '../prisma/prisma.service';
+import { WorkshopService } from '../workshop/workshop.service';
+import { ZatcaService } from '../zatca/zatca.service';
+import type { PosCheckoutDto } from './dto/pos.dto';
+
+/**
+ * Front-of-house checkout (v4 Phases 1–4). One call performs the whole counter
+ * transaction, because the steps are not independently useful — a reservation
+ * without an order, or an order without tickets, is a broken state.
+ *
+ *   measurement → yield → stock validation → reserve → order + designs
+ *   → deposit → ZATCA invoice → split production tickets
+ */
+@Injectable()
+export class PosService {
+  private readonly logger = new Logger(PosService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly yieldService: YieldService,
+    private readonly reservations: ReservationService,
+    private readonly workshop: WorkshopService,
+    private readonly invoices: InvoicesService,
+    private readonly zatca: ZatcaService,
+    private readonly audit: AuditService,
+  ) {}
+
+  /** Phase 1: phone lookup returns the customer with their active frames. */
+  async lookupByPhone(orgId: string, phone: string) {
+    const customer = await this.prisma.customer.findUnique({
+      where: { organizationId_phone: { organizationId: orgId, phone } },
+      include: {
+        measurements: {
+          where: { isActive: true },
+          orderBy: { garmentType: 'asc' },
+        },
+        orders: {
+          orderBy: { createdAt: 'desc' },
+          take: 5,
+          select: { id: true, orderNumber: true, status: true, totalAmount: true, createdAt: true },
+        },
+      },
+    });
+    if (!customer) return { found: false as const, phone };
+
+    return {
+      found: true as const,
+      customer: {
+        id: customer.id,
+        fullName: customer.fullName,
+        phone: customer.phone,
+        language: customer.language,
+        whatsappConsent: customer.whatsappConsent,
+        lifetimeOrderCount: customer.lifetimeOrderCount,
+        tier: this.tierFor(customer.lifetimeOrderCount),
+      },
+      activeMeasurements: customer.measurements,
+      recentOrders: customer.orders,
+    };
+  }
+
+  /** Customer tier from lifetime garments (v4 §1). */
+  private tierFor(count: number): 'new' | 'bronze' | 'silver' | 'gold' {
+    if (count >= 50) return 'gold';
+    if (count >= 20) return 'silver';
+    if (count >= 5) return 'bronze';
+    return 'new';
+  }
+
+  /** Phase 2 preview: what a garment will cost in fabric, before committing. */
+  async previewYield(customerId: string, garmentType: string, quantity = 1) {
+    const measurement = await this.prisma.measurement.findFirst({
+      where: { customerId, garmentType, isActive: true },
+    });
+    if (!measurement) {
+      throw new BadRequestException(
+        `No active measurement profile for ${garmentType} — take measurements first`,
+      );
+    }
+    if (!measurement.m1TotalLength || !measurement.m3SleeveLength) {
+      throw new BadRequestException(
+        'Active profile is missing M1 (total length) or M3 (sleeve length)',
+      );
+    }
+    const meters = this.yieldService.calculate({
+      totalLengthCm: measurement.m1TotalLength,
+      sleeveLengthCm: measurement.m3SleeveLength,
+      quantity,
+    });
+    return {
+      measurementId: measurement.id,
+      version: measurement.version,
+      perGarment: this.yieldService
+        .calculate({
+          totalLengthCm: measurement.m1TotalLength,
+          sleeveLengthCm: measurement.m3SleeveLength,
+        })
+        .toFixed(2),
+      totalMeters: meters.toFixed(2),
+      quantity,
+    };
+  }
+
+  /**
+   * The counter transaction. Everything happens in one database transaction so
+   * a stock failure on garment 3 cannot leave garments 1–2 reserved.
+   */
+  async checkout(orgId: string, storeId: string, userId: string, dto: PosCheckoutDto, ip?: string) {
+    const customer = await this.prisma.customer.findFirst({
+      where: { id: dto.customerId, organizationId: orgId },
+    });
+    if (!customer) throw new NotFoundException('Customer not found in your organization');
+    if (dto.items.length === 0) throw new BadRequestException('At least one garment is required');
+
+    // Resolve measurements and yields up front so we fail before writing anything.
+    const prepared: {
+      item: PosCheckoutDto['items'][number];
+      measurement: { id: string; m1TotalLength: Prisma.Decimal | null; m3SleeveLength: Prisma.Decimal | null };
+      yieldMeters: Prisma.Decimal;
+    }[] = [];
+    for (const [index, item] of dto.items.entries()) {
+      const measurement = await this.prisma.measurement.findFirst({
+        where: { customerId: dto.customerId, garmentType: item.garmentType, isActive: true },
+      });
+      if (!measurement?.m1TotalLength || !measurement?.m3SleeveLength) {
+        throw new BadRequestException(
+          `Garment ${index + 1} (${item.garmentType}): no active measurement profile with M1 and M3`,
+        );
+      }
+      prepared.push({
+        item,
+        measurement,
+        yieldMeters: this.yieldService.calculate({
+          totalLengthCm: measurement.m1TotalLength,
+          sleeveLengthCm: measurement.m3SleeveLength,
+          quantity: item.quantity ?? 1,
+        }),
+      });
+    }
+
+    const order = await this.prisma.$transaction(async (tx) => {
+      const count = await tx.order.count({ where: { storeId } });
+      const orderNumber = `ORD-${String(count + 1).padStart(6, '0')}`;
+
+      const total = prepared.reduce(
+        (sum, p) => sum.add(new Prisma.Decimal(p.item.unitPrice).mul(p.item.quantity ?? 1)),
+        new Prisma.Decimal(0),
+      );
+
+      const created = await tx.order.create({
+        data: {
+          organizationId: orgId,
+          storeId,
+          customerId: dto.customerId,
+          orderNumber,
+          totalAmount: total.minus(dto.discountAmount ?? 0),
+          discountAmount: dto.discountAmount ?? 0,
+          dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
+          notes: dto.notes,
+          createdById: userId,
+        },
+      });
+
+      for (const [index, p] of prepared.entries()) {
+        const orderItem = await tx.orderItem.create({
+          data: {
+            orderId: created.id,
+            garmentType: p.item.garmentType,
+            description: p.item.description,
+            quantity: p.item.quantity ?? 1,
+            unitPrice: p.item.unitPrice,
+            measurementId: p.measurement.id,
+            sequenceNo: index + 1,
+            collarStyle: p.item.collarStyle,
+            cuffStyle: p.item.cuffStyle,
+            pocketStyle: p.item.pocketStyle,
+            stitchingStyle: p.item.stitchingStyle,
+            yieldMeters: p.yieldMeters,
+          },
+        });
+
+        // Hold the fabric — validated against the roll's minimum usable point
+        await this.reservations.reserve(tx, {
+          batchId: p.item.fabricBatchId,
+          orderItemId: orderItem.id,
+          meters: p.yieldMeters,
+          storeId,
+          userId,
+        });
+      }
+
+      if (dto.depositAmount && dto.depositAmount > 0) {
+        await tx.payment.create({
+          data: {
+            orderId: created.id,
+            amount: dto.depositAmount,
+            method: dto.depositMethod ?? 'card',
+            kind: 'deposit', // liability until handover (v4 Phase 3 §2)
+            receivedById: userId,
+          },
+        });
+        await tx.order.update({
+          where: { id: created.id },
+          data: { paidAmount: dto.depositAmount },
+        });
+      }
+
+      await tx.orderStatusHistory.create({
+        data: { orderId: created.id, toStatus: 'pending', changedById: userId },
+      });
+      await tx.customer.update({
+        where: { id: dto.customerId },
+        data: { lifetimeOrderCount: { increment: prepared.length } },
+      });
+      await tx.customerStoreVisit.upsert({
+        where: { customerId_storeId: { customerId: dto.customerId, storeId } },
+        update: { lastVisitDate: new Date() },
+        create: { customerId: dto.customerId, storeId },
+      });
+      return created;
+    });
+
+    // Post-commit: tickets and the tax document. Deliberately outside the
+    // transaction — an invoice-numbering hiccup must not roll back a paid order.
+    const tickets = await this.workshop.createTicketsForOrder(order.id, userId);
+
+    let invoice = null;
+    try {
+      const created = await this.invoices.createForOrder(order.id, userId);
+      invoice = await this.zatca.issue(created.id, userId);
+    } catch (err) {
+      this.logger.error(`ZATCA issuance failed for ${order.orderNumber}: ${(err as Error).message}`);
+    }
+
+    await this.audit.log({
+      organizationId: orgId,
+      storeId,
+      actorUserId: userId,
+      action: 'pos.checkout',
+      entityType: 'order',
+      entityId: order.id,
+      newValue: {
+        orderNumber: order.orderNumber,
+        garments: prepared.length,
+        deposit: dto.depositAmount ?? 0,
+      },
+      ip,
+    });
+
+    const totalReserved = prepared.reduce(
+      (sum, p) => sum.add(p.yieldMeters),
+      new Prisma.Decimal(0),
+    );
+
+    return {
+      id: order.id,
+      orderNumber: order.orderNumber,
+      totalAmount: order.totalAmount.toFixed(2),
+      paidAmount: order.paidAmount.toFixed(2),
+      balanceDue: order.totalAmount.minus(order.paidAmount).toFixed(2),
+      totalReservedMeters: totalReserved.toFixed(2),
+      tickets: tickets.map((t) => ({ id: t.id, ticketCode: t.ticketCode, station: t.station })),
+      invoice: invoice && {
+        id: invoice.id,
+        invoiceNumber: invoice.invoiceNumber,
+        icv: invoice.icv,
+        netAmount: invoice.netAmount?.toFixed(2),
+        vatAmount: invoice.vatAmount?.toFixed(2),
+        totalAmount: invoice.totalAmount.toFixed(2),
+        qrCodeBase64: invoice.qrCodeBase64,
+      },
+    };
+  }
+
+  /** Phase 5 §3: final settlement moves the deposit into realised revenue. */
+  async settle(storeId: string, orderId: string, userId: string, amount: number, method?: string) {
+    const order = await this.prisma.order.findFirst({
+      where: { id: orderId, storeId },
+      include: { payments: true },
+    });
+    if (!order) throw new NotFoundException('Order not found in this store');
+
+    const paid = new Prisma.Decimal(order.paidAmount);
+    const balance = new Prisma.Decimal(order.totalAmount).minus(paid);
+    const payment = new Prisma.Decimal(amount);
+    if (payment.greaterThan(balance)) {
+      throw new BadRequestException(
+        `Payment ${payment.toFixed(2)} exceeds the outstanding balance ${balance.toFixed(2)}`,
+      );
+    }
+
+    const [created] = await this.prisma.$transaction([
+      this.prisma.payment.create({
+        data: {
+          orderId,
+          amount: payment,
+          method: (method as never) ?? 'cash',
+          kind: 'settlement',
+          receivedById: userId,
+        },
+      }),
+      this.prisma.order.update({
+        where: { id: orderId },
+        data: { paidAmount: paid.plus(payment) },
+      }),
+    ]);
+
+    const deposits = order.payments
+      .filter((p) => p.kind === 'deposit')
+      .reduce((sum, p) => sum.plus(p.amount), new Prisma.Decimal(0));
+
+    await this.audit.log({
+      storeId,
+      actorUserId: userId,
+      action: 'pos.settled',
+      entityType: 'order',
+      entityId: orderId,
+      newValue: {
+        amount: payment.toFixed(2),
+        depositReleasedFromLiability: deposits.toFixed(2),
+      },
+    });
+
+    return {
+      paymentId: created.id,
+      paidTotal: paid.plus(payment).toFixed(2),
+      balanceDue: balance.minus(payment).toFixed(2),
+      depositRealised: deposits.toFixed(2),
+    };
+  }
+}

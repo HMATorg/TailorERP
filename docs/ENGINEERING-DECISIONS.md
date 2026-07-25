@@ -323,6 +323,41 @@ as filed when it was not.
 - Invoices whose XML cannot be read are reported as `unverifiable` rather than counted as
   passing. Absence of evidence is not evidence of integrity.
 
+## D-031: Reserve at checkout, deduct at cutting
+
+- The blueprint distinguishes an **Inventory Hold** (Phase 2 §3) from the actual cut
+  (Phase 4 §2). We had been deducting immediately at order creation.
+- **Decision:** checkout increments `reserved_quantity`; leaving the **cutting** station
+  decrements `current_quantity` and releases the hold, writing the `order_out` movement
+  at that moment. Cancellation releases the hold with no movement at all.
+- **Why it matters:** deducting at checkout makes the roll balance lie — the fabric is
+  still physically on the shelf until it is cut. Reserving keeps the ledger truthful
+  while still stopping a walk-in sale from consuming promised metres.
+- A CHECK constraint keeps `reserved_quantity` between 0 and `current_quantity`, so the
+  two counters cannot drift into an impossible state.
+
+## D-032: Yield is computed from the customer's own active measurements
+
+- `Yield = (M1 × 2) + M3 + 0.20 m`, rounded **up** — a short cut ruins the garment,
+  whereas a small offcut costs pennies.
+- Measurements are captured in centimetres and the formula is stated in metres; the
+  conversion lives in `YieldService` alone rather than at each call site.
+- Availability is checked against `current − reserved`, then against the roll's own
+  `min_usable_meters` (default 3.50 m). A roll that *has* the metres but would be
+  stranded below its minimum is correctly refused.
+
+## D-033: POS checkout is one call, not a wizard of independent endpoints
+
+- `POST /pos/orders` performs measurement resolution → yield → stock validation →
+  reservation → order + design variants → deposit → tickets → ZATCA invoice.
+- **Rationale:** the intermediate states are not independently valid. A reservation
+  without an order leaks stock; an order without tickets never reaches the workshop.
+  Everything that must be atomic runs in one transaction, so a stock failure on garment
+  three cannot leave garments one and two reserved.
+- Deliberately **outside** the transaction: ticket creation and invoice issuance. An
+  invoice-numbering hiccup must not roll back a payment the customer already made; those
+  steps are idempotent and retryable instead.
+
 ## D-014: Validation library
 
 - **Decision:** `class-validator` + `class-transformer` DTOs (canonical NestJS style) rather

@@ -4,6 +4,8 @@ import { validateEnv } from './config/env.validation';
 import { AppointmentsModule } from './appointments/appointments.module';
 import { AuditModule } from './audit/audit.module';
 import { AuthModule } from './auth/auth.module';
+import { PosModule } from './pos/pos.module';
+import { WorkshopModule } from './workshop/workshop.module';
 import { ZatcaModule } from './zatca/zatca.module';
 import { BillingModule } from './billing/billing.module';
 import { CustomerModule } from './customer-api/customer.module';
@@ -44,6 +46,8 @@ import { TeamModule } from './team/team.module';
     NotificationsModule,
     PlatformModule,
     BillingModule,
+    PosModule,
+    WorkshopModule,
     ZatcaModule,
     HealthModule,
   ],
