@@ -37,9 +37,21 @@ npm run dev:platform-admin    # platform admin on http://localhost:5175
 ## Testing
 
 ```bash
-npm run test --workspaces --if-present   # unit: FIFO, permissions, slot availability
-npm run test:e2e -w @tailonix/api        # e2e: platform admin API (needs docker + seed)
+npm run test --workspaces --if-present   # unit: FIFO, permissions, slot availability, billing
+npm run test:e2e -w @tailonix/api        # e2e: platform admin + notifications (needs docker + seed)
 ```
+
+## Performance
+
+Measured baselines and the two index fixes they prompted are in
+[docs/PERFORMANCE.md](docs/PERFORMANCE.md). To reproduce at PRD scale:
+
+```bash
+npm run prisma:seed-scale -w @tailonix/api
+```
+
+Creates an isolated `Scale Test Chain` tenant (100 stores, 50k orders). Remove it with
+`CLEANUP=1 npm run prisma:seed-scale -w @tailonix/api`.
 
 ## Seeded dev logins
 

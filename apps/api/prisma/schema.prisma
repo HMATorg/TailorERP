@@ -3,12 +3,14 @@
 // Decimal(12,2) for quantities/money, JSONB for flexible payloads.
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [pgTrgm(map: "pg_trgm")]
 }
 
 // ─────────────────────────────── Enums ───────────────────────────────
@@ -225,6 +227,7 @@ model UserStoreRole {
 
   @@unique([userId, storeId])
   @@index([userId, storeId, isActive])
+  @@index([storeId])
   @@map("user_store_roles")
 }
 
@@ -246,6 +249,7 @@ model Invitation {
   invitedBy    User?        @relation("InvitationInvitedBy", fields: [invitedById], references: [id])
 
   @@index([organizationId, status])
+  @@index([invitedById])
   @@map("invitations")
 }
 
@@ -276,6 +280,10 @@ model Customer {
   whatsappMessages WhatsappMessage[]
 
   @@unique([organizationId, phone])
+  // Substring search (ILIKE '%…%') cannot use a B-tree — see D-025
+  @@index([fullName(ops: raw("gin_trgm_ops"))], type: Gin, map: "customers_full_name_trgm_idx")
+  @@index([phone(ops: raw("gin_trgm_ops"))], type: Gin, map: "customers_phone_trgm_idx")
+  @@index([preferredStoreId])
   @@map("customers")
 }
 
@@ -290,6 +298,7 @@ model CustomerStoreVisit {
   store    Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
   @@unique([customerId, storeId])
+  @@index([storeId])
   @@map("customer_store_visits")
 }
 
@@ -323,6 +332,8 @@ model Measurement {
   orderItems OrderItem[]
 
   @@index([customerId, garmentType, createdAt])
+  @@index([storeId])
+  @@index([takenById])
   @@map("measurements")
 }
 
@@ -348,6 +359,8 @@ model Appointment {
 
   @@index([storeId, assignedTailorId, scheduledAt])
   @@index([storeId, scheduledAt])
+  @@index([customerId])
+  @@index([assignedTailorId])
   @@map("appointments")
 }
 
@@ -400,6 +413,7 @@ model InventoryBatch {
   @@unique([storeId, batchCode])
   // FIFO query path (TRD §9)
   @@index([storeId, fabricName, purchaseDate, status])
+  @@index([supplierId])
   @@map("inventory_batches")
 }
 
@@ -421,6 +435,8 @@ model InventoryMovement {
   createdBy User?          @relation("MovementCreatedBy", fields: [createdById], references: [id])
 
   @@index([batchId, createdAt])
+  @@index([createdById])
+  @@index([orderId])
   @@map("inventory_movements")
 }
 
@@ -455,6 +471,7 @@ model InventoryRestockAlert {
   resolvedBy User? @relation("AlertResolvedBy", fields: [resolvedById], references: [id])
 
   @@index([storeId, status])
+  @@index([resolvedById])
   @@map("inventory_restock_alerts")
 }
 
@@ -491,6 +508,13 @@ model Order {
   @@unique([storeId, orderNumber])
   @@index([storeId, customerId, createdAt])
   @@index([storeId, status])
+  @@index([orderNumber(ops: raw("gin_trgm_ops"))], type: Gin, map: "orders_order_number_trgm_idx")
+  // NOTE: the dashboard aggregation also relies on a *partial* covering index
+  // (orders_store_created_active_idx) that Prisma cannot express — it lives in
+  // migration 20260725010000 and must not be dropped. See D-024.
+  @@index([customerId])
+  @@index([createdById])
+  @@index([organizationId])
   @@map("orders")
 }
 
@@ -509,6 +533,7 @@ model OrderItem {
   fabrics     OrderItemFabric[]
 
   @@index([orderId])
+  @@index([measurementId])
   @@map("order_items")
 }
 
@@ -543,6 +568,7 @@ model OrderStatusHistory {
   changedBy User? @relation("StatusChangedBy", fields: [changedById], references: [id])
 
   @@index([orderId, createdAt])
+  @@index([changedById])
   @@map("order_status_history")
 }
 
@@ -559,6 +585,7 @@ model Payment {
   receivedBy User? @relation("PaymentReceivedBy", fields: [receivedById], references: [id])
 
   @@index([orderId])
+  @@index([receivedById])
   @@map("payments")
 }
 
@@ -618,6 +645,9 @@ model WhatsappMessage {
 
   @@index([storeId, createdAt])
   @@index([waMessageId])
+  @@index([customerId])
+  @@index([orderId])
+  @@index([organizationId])
   @@map("whatsapp_messages")
 }
 
@@ -642,6 +672,7 @@ model AuditLog {
 
   @@index([organizationId, createdAt])
   @@index([entityType, entityId])
+  @@index([actorUserId])
   @@map("audit_logs")
 }
 
@@ -728,5 +759,6 @@ model OrganizationSubscription {
   organization Organization     @relation(fields: [organizationId], references: [id])
   plan         SubscriptionPlan @relation(fields: [planId], references: [id])
 
+  @@index([planId])
   @@map("organization_subscriptions")
 }

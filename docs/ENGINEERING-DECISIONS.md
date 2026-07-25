@@ -233,6 +233,52 @@ npm workspaces (no pnpm dependency on dev machines). Node 24, TypeScript 5 stric
   returned media ID in the message (two calls, per TRD §5.5).
 - Staff can also invoice on demand from the order screen before delivery.
 
+## D-024: Partial covering index for the dashboard aggregation
+
+- **Problem found by profiling** (see [PERFORMANCE.md](PERFORMANCE.md)): the HQ dashboard
+  did a **sequential scan of `orders`** on every load. The TRD's suggested index
+  `(store_id, customer_id, created_at)` leads with `store_id` and cannot serve a
+  date-range filter spanning all stores.
+- **Decision:** `orders (store_id, created_at) INCLUDE (total_amount) WHERE status <> 'cancelled'`.
+  Partial because cancelled orders never count toward revenue; covering so the aggregate
+  is satisfied from the index.
+- **Rejected:** materialized views (TRD §9 suggests them as a fallback). Unnecessary —
+  p95 is 29 ms against a 2 s budget — and they add refresh lag plus a cron dependency to
+  a number the business reads as live.
+- **Maintenance hazard:** Prisma cannot express partial or covering indexes, so this one
+  lives only in raw migration SQL with a pointer comment in `schema.prisma`. A migration
+  that rebuilds `orders` must re-create it.
+
+## D-025: Trigram indexes for substring search
+
+- **Problem:** customer and order search use `ILIKE '%term%'`, which no B-tree can serve.
+  At 202k customers a search cost 94.5 ms of pure sequential scan — per keystroke, per
+  user. The PRD targets 1M+ customers.
+- **Decision:** `pg_trgm` + GIN on `customers.full_name`, `customers.phone`, and
+  `orders.order_number`. Measured 94.5 ms → 19.9 ms, and the gap widens with row count.
+- **Declared in `schema.prisma`** using the `postgresqlExtensions` preview feature with
+  explicit `map:` names, so `prisma migrate dev` does not offer to drop them. Verified
+  clean with `prisma migrate diff`.
+- **Not chosen:** a search service (Elasticsearch/Meilisearch). Postgres handles this
+  workload comfortably; adding a second datastore would mean sync lag and another thing
+  to operate for no measured benefit.
+
+## D-026: Index every foreign key
+
+- **Problem:** Postgres does not index foreign keys automatically. Deleting a referenced
+  row scans each *referencing* table to enforce the constraint. An audit found **23
+  unindexed FKs**; deleting 200k customers hung for over ten minutes because each row
+  triggered sequential scans of `orders`, `appointments`, and `whatsapp_messages`.
+  After indexing: **4.85 s**.
+- **Why it matters beyond cleanup:** PRD §5 requires GDPR/PDPL erasure. Customer
+  deletion is a product feature, and it was effectively broken.
+- **Decision:** index all 23, not just the customer path. Deactivating a user, closing a
+  store, and offboarding a tenant have the same shape, and the cost of an index on a
+  UUID column is small compared to a table scan under lock.
+- **Standing rule:** every new `@relation` gets an index on its FK column unless it is
+  already the leading column of a composite index. `@@index([storeId, customerId, …])`
+  does **not** cover lookups by `customerId` — leading column only.
+
 ## D-014: Validation library
 
 - **Decision:** `class-validator` + `class-transformer` DTOs (canonical NestJS style) rather
