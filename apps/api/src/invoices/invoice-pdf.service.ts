@@ -1,10 +1,13 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, OnModuleInit } from '@nestjs/common';
 import PDFDocument from 'pdfkit';
+import QRCode from 'qrcode';
+import { AR, AR_BOLD, assertFontsPresent, registerInvoiceFonts } from './invoice-fonts';
 
 export interface InvoiceLine {
   garmentType: string;
   description?: string | null;
   quantity: number;
+  /** VAT-inclusive, matching how the customer was quoted. */
   unitPrice: string;
 }
 
@@ -12,6 +15,7 @@ export interface InvoiceData {
   invoiceNumber: string;
   issuedAt: Date;
   organizationName: string;
+  organizationVatNumber?: string | null;
   organizationTaxId?: string | null;
   storeName: string;
   storeAddress?: string | null;
@@ -21,120 +25,328 @@ export interface InvoiceData {
   orderNumber: string;
   currency: string;
   lines: InvoiceLine[];
+  /** Sum of line totals, VAT-inclusive, before discount. */
   subtotal: string;
   discount: string;
+  /** Gross payable = net + VAT. */
   total: string;
+  /** Net of VAT. */
+  netAmount: string;
+  vatAmount: string;
+  /** Percentage, e.g. "15.00". */
+  vatRate: string;
   paid: string;
+  /** Base64 TLV payload from the ZATCA service; absent until the invoice is issued. */
+  qrCodeBase64?: string | null;
+  simplified?: boolean;
 }
 
 const TEAL = '#00695C';
 const GREY = '#757575';
+const LIGHT = '#9E9E9E';
 const CHARCOAL = '#212121';
+const RULE = '#E0E0E0';
+
+// A4 content box
+const LEFT = 50;
+const RIGHT = 545;
 
 /**
- * Invoice PDF (TRD §5.5). Latin-only by design: PDFKit's standard fonts cannot
- * shape Arabic, and bundling a shaping-capable font is a separate decision
- * (see D-021). Arabic invoices therefore render the Latin/numeric layout.
+ * KSA tax invoice (TRD §5.5, ZATCA Fatoora Phase 2).
+ *
+ * Arabic-first and right-to-left, because Article 53 of the VAT Implementing
+ * Regulations requires tax invoices to be issued in Arabic; English is carried
+ * alongside as the secondary language. Arabic and English are always drawn as
+ * separate runs rather than concatenated into one string — a single mixed
+ * string is laid out by the bidi algorithm and the result reads correctly but
+ * places punctuation unpredictably, which is not worth the risk on a legal
+ * document.
  */
 @Injectable()
-export class InvoicePdfService {
+export class InvoicePdfService implements OnModuleInit {
+  /** Surface a missing font at boot, not when a customer is waiting at the counter. */
+  onModuleInit(): void {
+    assertFontsPresent();
+  }
+
   async generate(data: InvoiceData): Promise<Buffer> {
     const doc = new PDFDocument({ size: 'A4', margin: 50 });
+    registerInvoiceFonts(doc);
+
     const chunks: Buffer[] = [];
     doc.on('data', (c: Buffer) => chunks.push(c));
     const done = new Promise<Buffer>((resolve) => {
       doc.on('end', () => resolve(Buffer.concat(chunks)));
     });
 
-    const money = (v: string) => `${data.currency} ${Number(v).toFixed(2)}`;
+    // Amounts stay in Western digits: that is what ZATCA's own samples use and
+    // what the QR payload carries, so the printed figure matches the scanned one.
+    const money = (v: string) => `${Number(v).toFixed(2)} ${data.currency}`;
 
-    // Header
-    doc.fillColor(TEAL).fontSize(24).font('Helvetica-Bold').text(data.organizationName, 50, 50);
-    doc.fillColor(GREY).fontSize(9).font('Helvetica');
-    if (data.organizationTaxId) doc.text(`Tax ID: ${data.organizationTaxId}`);
-    doc.text(data.storeName);
-    if (data.storeAddress) doc.text(data.storeAddress);
-    if (data.storePhone) doc.text(data.storePhone);
+    const qr = await this.renderQr(data.qrCodeBase64);
 
-    doc
-      .fillColor(CHARCOAL)
-      .fontSize(20)
-      .font('Helvetica-Bold')
-      .text('INVOICE', 400, 50, { align: 'right' });
-    doc
-      .fillColor(GREY)
-      .fontSize(10)
-      .font('Helvetica')
-      .text(data.invoiceNumber, 400, 76, { align: 'right' })
-      .text(data.issuedAt.toISOString().slice(0, 10), 400, 90, { align: 'right' });
-
-    // Bill-to
-    doc.moveTo(50, 130).lineTo(545, 130).strokeColor('#E0E0E0').stroke();
-    doc.fillColor(GREY).fontSize(9).text('BILL TO', 50, 145);
-    doc.fillColor(CHARCOAL).fontSize(12).font('Helvetica-Bold').text(data.customerName, 50, 158);
-    doc.fillColor(GREY).fontSize(10).font('Helvetica').text(data.customerPhone, 50, 174);
-    doc.text(`Order ${data.orderNumber}`, 400, 158, { align: 'right' });
-
-    // Line items
-    let y = 215;
-    doc.rect(50, y - 6, 495, 22).fill('#F5F5F5');
-    doc.fillColor(GREY).fontSize(9).font('Helvetica-Bold');
-    doc.text('ITEM', 58, y).text('QTY', 350, y).text('UNIT', 400, y).text('AMOUNT', 470, y);
-    y += 26;
-
-    doc.font('Helvetica').fontSize(10);
-    for (const line of data.lines) {
-      const amount = (Number(line.unitPrice) * line.quantity).toFixed(2);
-      doc.fillColor(CHARCOAL).text(line.garmentType, 58, y, { width: 280 });
-      if (line.description) {
-        doc.fillColor(GREY).fontSize(8).text(line.description, 58, y + 12, { width: 280 });
-        doc.fontSize(10);
-      }
-      doc
-        .fillColor(CHARCOAL)
-        .text(String(line.quantity), 350, y)
-        .text(Number(line.unitPrice).toFixed(2), 400, y)
-        .text(amount, 470, y);
-      y += line.description ? 34 : 22;
-
-      if (y > 700) {
-        doc.addPage();
-        y = 60;
-      }
-    }
-
-    // Totals
-    doc.moveTo(330, y + 4).lineTo(545, y + 4).strokeColor('#E0E0E0').stroke();
-    y += 14;
-    const totalRow = (label: string, value: string, bold = false) => {
-      doc
-        .fillColor(bold ? CHARCOAL : GREY)
-        .font(bold ? 'Helvetica-Bold' : 'Helvetica')
-        .fontSize(bold ? 12 : 10)
-        .text(label, 330, y)
-        .text(value, 430, y, { align: 'right', width: 115 });
-      y += bold ? 20 : 16;
-    };
-    totalRow('Subtotal', money(data.subtotal));
-    if (Number(data.discount) > 0) totalRow('Discount', `-${money(data.discount)}`);
-    totalRow('Total', money(data.total), true);
-    totalRow('Paid', money(data.paid));
-
-    const balance = (Number(data.total) - Number(data.paid)).toFixed(2);
-    if (Number(balance) > 0) {
-      doc.fillColor('#C62828').font('Helvetica-Bold').fontSize(11);
-      doc.text('Balance due', 330, y).text(money(balance), 430, y, { align: 'right', width: 115 });
-    } else {
-      doc.fillColor('#2E7D32').font('Helvetica-Bold').fontSize(11).text('PAID IN FULL', 330, y);
-    }
-
-    doc
-      .fillColor(GREY)
-      .font('Helvetica')
-      .fontSize(8)
-      .text('Thank you for your business.', 50, 780, { align: 'center', width: 495 });
+    this.header(doc, data);
+    this.parties(doc, data);
+    const y = this.lineItems(doc, data);
+    this.totals(doc, data, money, y);
+    this.footer(doc, qr);
 
     doc.end();
     return done;
+  }
+
+  /**
+   * ZATCA specifies the QR carries the base64 TLV string itself. Rendering is
+   * best-effort: a QR failure must not cost the counter its invoice, and the
+   * absence is visible on the page rather than silent.
+   */
+  private async renderQr(payload?: string | null): Promise<Buffer | null> {
+    if (!payload) return null;
+    try {
+      return await QRCode.toBuffer(payload, {
+        type: 'png',
+        errorCorrectionLevel: 'M',
+        margin: 0,
+        width: 300,
+      });
+    } catch {
+      return null;
+    }
+  }
+
+  /** Arabic label with its English counterpart underneath, right-aligned. */
+  private label(
+    doc: PDFKit.PDFDocument,
+    ar: string,
+    en: string,
+    x: number,
+    y: number,
+    width: number,
+    size = 9,
+  ): void {
+    doc.font(AR).fontSize(size).fillColor(GREY).text(ar, x, y, { width, align: 'right' });
+    doc.font(AR).fontSize(size - 2).fillColor(LIGHT).text(en, x, y + size + 1, { width, align: 'right' });
+  }
+
+  private header(doc: PDFKit.PDFDocument, data: InvoiceData): void {
+    // Seller block on the right — the reading origin in an RTL document.
+    doc
+      .font(AR_BOLD)
+      .fontSize(20)
+      .fillColor(TEAL)
+      .text(data.organizationName, 280, 50, { width: RIGHT - 280, align: 'right' });
+
+    let y = 78;
+    doc.font(AR).fontSize(9).fillColor(GREY);
+    const vat = data.organizationVatNumber ?? data.organizationTaxId;
+    if (vat) {
+      // The seller's VAT registration number is mandatory on a tax invoice.
+      doc.text(`الرقم الضريبي ${vat}`, 280, y, { width: RIGHT - 280, align: 'right' });
+      y += 13;
+    }
+    for (const l of [data.storeName, data.storeAddress, data.storePhone]) {
+      if (!l) continue;
+      doc.text(l, 280, y, { width: RIGHT - 280, align: 'right' });
+      y += 12;
+    }
+
+    // Document identity on the left.
+    doc
+      .font(AR_BOLD)
+      .fontSize(15)
+      .fillColor(CHARCOAL)
+      .text(data.simplified === false ? 'فاتورة ضريبية' : 'فاتورة ضريبية مبسطة', LEFT, 50, {
+        width: 210,
+        align: 'left',
+      });
+    doc
+      .font(AR)
+      .fontSize(8)
+      .fillColor(LIGHT)
+      .text(data.simplified === false ? 'Tax Invoice' : 'Simplified Tax Invoice', LEFT, 70, {
+        width: 210,
+        align: 'left',
+      });
+
+    doc.font(AR).fontSize(10).fillColor(GREY);
+    doc.text(data.invoiceNumber, LEFT, 88, { width: 210, align: 'left' });
+    doc.text(data.issuedAt.toISOString().slice(0, 10), LEFT, 102, { width: 210, align: 'left' });
+  }
+
+  private parties(doc: PDFKit.PDFDocument, data: InvoiceData): void {
+    doc.moveTo(LEFT, 132).lineTo(RIGHT, 132).strokeColor(RULE).stroke();
+
+    this.label(doc, 'فاتورة إلى', 'Bill to', 300, 145, RIGHT - 300);
+    doc
+      .font(AR_BOLD)
+      .fontSize(12)
+      .fillColor(CHARCOAL)
+      .text(data.customerName, 300, 168, { width: RIGHT - 300, align: 'right' });
+    doc
+      .font(AR)
+      .fontSize(10)
+      .fillColor(GREY)
+      .text(data.customerPhone, 300, 185, { width: RIGHT - 300, align: 'right' });
+
+    this.label(doc, 'رقم الطلب', 'Order no.', LEFT, 145, 200);
+    doc
+      .font(AR)
+      .fontSize(11)
+      .fillColor(CHARCOAL)
+      .text(data.orderNumber, LEFT, 168, { width: 200, align: 'left' });
+  }
+
+  /** RTL table: item on the right, amount on the left. Returns the y cursor. */
+  private lineItems(doc: PDFKit.PDFDocument, data: InvoiceData): number {
+    const COL = {
+      amount: { x: LEFT, w: 100 },
+      unit: { x: 160, w: 80 },
+      qty: { x: 250, w: 40 },
+      item: { x: 300, w: RIGHT - 300 },
+    };
+
+    let y = 218;
+    doc.rect(LEFT, y - 6, RIGHT - LEFT, 30).fill('#F5F5F5');
+    this.label(doc, 'البند', 'Item', COL.item.x, y, COL.item.w, 9);
+    this.label(doc, 'الكمية', 'Qty', COL.qty.x, y, COL.qty.w, 9);
+    this.label(doc, 'السعر', 'Unit', COL.unit.x, y, COL.unit.w, 9);
+    this.label(doc, 'المبلغ', 'Amount', COL.amount.x, y, COL.amount.w, 9);
+    y += 34;
+
+    for (const line of data.lines) {
+      const amount = (Number(line.unitPrice) * line.quantity).toFixed(2);
+
+      doc
+        .font(AR)
+        .fontSize(10)
+        .fillColor(CHARCOAL)
+        .text(line.garmentType, COL.item.x, y, { width: COL.item.w, align: 'right' });
+      if (line.description) {
+        doc
+          .font(AR)
+          .fontSize(8)
+          .fillColor(GREY)
+          .text(line.description, COL.item.x, y + 13, { width: COL.item.w, align: 'right' });
+      }
+
+      doc.font(AR).fontSize(10).fillColor(CHARCOAL);
+      doc.text(String(line.quantity), COL.qty.x, y, { width: COL.qty.w, align: 'right' });
+      doc.text(Number(line.unitPrice).toFixed(2), COL.unit.x, y, { width: COL.unit.w, align: 'right' });
+      doc.text(amount, COL.amount.x, y, { width: COL.amount.w, align: 'right' });
+
+      y += line.description ? 36 : 24;
+      if (y > 640) {
+        doc.addPage();
+        registerInvoiceFonts(doc);
+        y = 60;
+      }
+    }
+    return y;
+  }
+
+  private totals(
+    doc: PDFKit.PDFDocument,
+    data: InvoiceData,
+    money: (v: string) => string,
+    startY: number,
+  ): void {
+    // Totals sit on the left, where an RTL line ends.
+    const LABEL = { x: 170, w: 150 };
+    const VALUE = { x: LEFT, w: 110 };
+    let y = startY + 6;
+
+    doc.moveTo(LEFT, y).lineTo(330, y).strokeColor(RULE).stroke();
+    y += 12;
+
+    const row = (ar: string, en: string, value: string, opts: { bold?: boolean; color?: string } = {}) => {
+      const size = opts.bold ? 11 : 9;
+      doc
+        .font(opts.bold ? AR_BOLD : AR)
+        .fontSize(size)
+        .fillColor(opts.color ?? (opts.bold ? CHARCOAL : GREY))
+        .text(ar, LABEL.x, y, { width: LABEL.w, align: 'right' });
+      doc
+        .font(AR)
+        .fontSize(7)
+        .fillColor(LIGHT)
+        .text(en, LABEL.x, y + size + 1, { width: LABEL.w, align: 'right' });
+      doc
+        .font(opts.bold ? AR_BOLD : AR)
+        .fontSize(size)
+        .fillColor(opts.color ?? (opts.bold ? CHARCOAL : GREY))
+        .text(value, VALUE.x, y, { width: VALUE.w, align: 'right' });
+      y += size + 14;
+    };
+
+    if (Number(data.discount) > 0) {
+      row('المجموع الفرعي', 'Subtotal', money(data.subtotal));
+      row('الخصم', 'Discount', `-${money(data.discount)}`);
+    }
+
+    // The three figures ZATCA requires a tax invoice to state explicitly.
+    row('الإجمالي غير شامل الضريبة', 'Total excluding VAT', money(data.netAmount));
+    row(
+      `ضريبة القيمة المضافة ${Number(data.vatRate).toFixed(0)}%`,
+      'VAT',
+      money(data.vatAmount),
+    );
+    row('الإجمالي شامل الضريبة', 'Total including VAT', money(data.total), { bold: true });
+
+    row('المدفوع', 'Paid', money(data.paid));
+    const balance = (Number(data.total) - Number(data.paid)).toFixed(2);
+    if (Number(balance) > 0.004) {
+      row('المبلغ المتبقي', 'Balance due', money(balance), { bold: true, color: '#C62828' });
+    } else {
+      doc
+        .font(AR_BOLD)
+        .fontSize(11)
+        .fillColor('#2E7D32')
+        .text('مدفوعة بالكامل', LABEL.x, y, { width: LABEL.w, align: 'right' });
+      doc
+        .font(AR)
+        .fontSize(7)
+        .fillColor(LIGHT)
+        .text('Paid in full', LABEL.x, y + 12, { width: LABEL.w, align: 'right' });
+    }
+  }
+
+  private footer(doc: PDFKit.PDFDocument, qr: Buffer | null): void {
+    // A4 is 841.89pt tall. The QR block is 96pt plus a 12pt caption, so it has
+    // to start high enough that the caption does not push onto a second page —
+    // which is exactly what happened when this began at 690.
+    const y = 660;
+    if (qr) {
+      doc.image(qr, RIGHT - 96, y, { width: 96 });
+      doc
+        .font(AR)
+        .fontSize(7)
+        .fillColor(LIGHT)
+        .text('امسح للتحقق · Scan to verify', RIGHT - 150, y + 100, {
+          width: 150,
+          align: 'right',
+          lineBreak: false,
+        });
+    } else {
+      // Visible rather than silent: an unissued invoice should look unfinished.
+      doc
+        .font(AR)
+        .fontSize(7)
+        .fillColor('#C62828')
+        .text('لم يتم إصدار رمز الاستجابة السريعة · QR not yet issued', RIGHT - 220, y, {
+          width: 220,
+          align: 'right',
+        });
+    }
+
+    doc
+      .font(AR)
+      .fontSize(9)
+      .fillColor(GREY)
+      .text('شكرًا لتعاملكم معنا', LEFT, y + 60, { width: 240, align: 'left' });
+    doc
+      .font(AR)
+      .fontSize(7)
+      .fillColor(LIGHT)
+      .text('Thank you for your business.', LEFT, y + 74, { width: 240, align: 'left' });
   }
 }

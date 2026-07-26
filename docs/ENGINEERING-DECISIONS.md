@@ -207,7 +207,14 @@ npm workspaces (no pnpm dependency on dev machines). Node 24, TypeScript 5 stric
   do not use Stripe fully functional. Webhooks without a valid signature are rejected
   **400 before any parsing** — the signature is the only authentication that endpoint has.
 
-## D-021: Invoice PDFs are Latin-only for now
+## D-021: Invoice PDFs are Latin-only for now — **superseded by D-040**
+
+> **Superseded.** The constraint below was half right and half wrong, and the wrong
+> half is why this sat unfixed. PDFKit's *built-in* fonts genuinely cannot render
+> Arabic. But the claim that correct output additionally needs a separate
+> bidi/shaping pass is false: PDFKit lays out embedded OpenType fonts through
+> fontkit, which shapes Arabic and reorders RTL runs on its own. The only thing
+> missing was the font file. See D-040.
 
 - **Constraint:** PDFKit's built-in fonts are WinAnsi-encoded and cannot *shape*
   Arabic — glyphs would render disconnected and left-to-right. Correct Arabic output
@@ -454,3 +461,51 @@ as filed when it was not.
   no ICV gaps.
 - Harness kept at `apps/api/test/concurrency-harness.js`; run it against a live API
   after any change to reservation, numbering, or issuance.
+
+## D-040: Arabic invoices need a font, not a shaping engine
+
+- **Supersedes D-021**, whose stated blocker — that a separate bidi/shaping pass was
+  required — was wrong and cost the product a compliance gap it did not need to have.
+- **Measured, not assumed.** PDFKit lays out embedded OpenType fonts through fontkit.
+  Given a real face, fontkit applies the Arabic shaper and returns the run already
+  reordered (`run.direction === 'rtl'`): 12 source characters of `خياطة الأنوار`
+  become 12 glyphs whose ids differ from a per-character cmap lookup, and PDFKit
+  emits all of them contiguously in one `TJ` array. No `harfbuzzjs`, no manual
+  reversal — reversing the source string yourself actively breaks it.
+- **Decision:** embed **Tajawal** (SIL OFL) at `apps/api/src/assets/fonts`, registered
+  in `invoice-fonts.ts`. Chosen over Noto Naskh Arabic because it is the face the
+  admin SPA and PWA already use, its word space is 0.240 em against Noto Naskh's
+  0.108 em (words look separated at invoice body sizes), and it is a third the size.
+- **`src/assets`, not `assets`,** so `nest build` copies the files into `dist` via the
+  `assets` entry in nest-cli.json. `<src|dist>/invoices/..` then resolves to
+  `<src|dist>/assets/fonts` unchanged between dev and the built output.
+- **Missing fonts throw at boot** (`OnModuleInit`). A silent fallback to a Latin face
+  is exactly how this stayed hidden: the PDF still renders, it just turns every
+  Arabic name into boxes. An invoice that cannot show Arabic is not a valid KSA tax
+  invoice, so failing the deploy beats shipping quiet non-compliance.
+- **Verifying this needs measurement, not eyes.** Arabic letterforms abut, so a
+  dropped word space looks plausible. Reading rendered pages by eye produced two
+  wrong conclusions in a row, and pdf.js text extraction produced a third — it
+  reconstructs RTL runs in visual order and splits the lam-alef ligature back into
+  two code points, so it reports spaces that are present as missing. What settled it:
+  `widthOfString('خياطة الأنوار') − widthOfString('خياطةالأنوار')` = 9.60 pt at 40 pt,
+  exactly 0.240 em, and the sum of the emitted CIDs against the subset's `/W` table
+  agrees with it. `invoice-fonts.spec.ts` pins all of that.
+
+## D-041: Creating an invoice issues it; the PDF is rendered after
+
+- **Bug this fixes:** `createForOrder` rendered and stored the PDF *before* anything
+  called `ZatcaService.issue`, so every printed invoice went out with `netAmount` and
+  `vatAmount` still at their `0` defaults and no QR — no VAT block at all on a KSA tax
+  invoice. The WhatsApp path never issued to ZATCA in the first place.
+- **Decision:** `InvoicesService.createForOrder` creates the row, calls `zatca.issue`,
+  and only then renders. `InvoicesModule` imports `ZatcaModule` (no cycle — ZatcaModule
+  imports nothing). POS no longer issues separately; issuance is idempotent, so the
+  ordering holds no matter which path creates the invoice.
+- **Rationale:** in KSA these are one operation. A document without a VAT split and a
+  QR is not a tax invoice, so letting callers do the two steps in their own order made
+  correctness a function of which endpoint you happened to come through.
+- **Rows predating issuance** still render: `buildPdfData` recomputes the split with
+  `splitInclusive` when the stored tax block is zero, rather than printing "VAT 0.00"
+  on a document whose total plainly includes VAT. An unissued invoice prints
+  "QR not yet issued" instead of silently omitting the QR.

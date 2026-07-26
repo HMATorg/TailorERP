@@ -6,9 +6,7 @@
 > the repo — why something is blocked, what a trap looks like — belongs in the
 > auto-memory directory, not here.
 
-**Parent** `871ab64` on `main` · **generated** 2026-07-26 14:52Z · staged into the commit being created on top of it
-
-_History below runs to the parent; the commit carrying this file is its child._
+**HEAD** `b685805` on `main` · **generated** 2026-07-26 16:12Z · **working tree** 12 file(s) uncommitted
 
 ## Drift
 
@@ -25,6 +23,7 @@ graph LR
   Billing --> Auth
   Billing --> Platform
   Customer --> Appointments
+  Invoices --> Zatca
   Notifications --> Invoices
   Orders --> Inventory
   Orders --> Notifications
@@ -42,7 +41,7 @@ graph LR
 | App | Package | Dev port | TS/TSX files | Direct deps |
 | --- | --- | --- | --- | --- |
 | `apps/admin` | `@tailonix/admin` | 5173 | 23 | 11 |
-| `apps/api` | `@tailonix/api` | 3000 | 117 | 20 |
+| `apps/api` | `@tailonix/api` | 3000 | 119 | 21 |
 | `apps/platform-admin` | `@tailonix/platform-admin` | 5175 | 8 | 8 |
 | `apps/pos` | `@tailonix/pos` | 5176 | 8 | 12 |
 | `apps/pwa` | `@tailonix/pwa` | 5174 | 13 | 9 |
@@ -63,7 +62,7 @@ graph LR
 | `DashboardModule` | `apps/api/src/dashboard/dashboard.module.ts` | — |
 | `HealthModule` | `apps/api/src/health/health.module.ts` | — |
 | `InventoryModule` | `apps/api/src/inventory/inventory.module.ts` | — |
-| `InvoicesModule` | `apps/api/src/invoices/invoices.module.ts` | — |
+| `InvoicesModule` | `apps/api/src/invoices/invoices.module.ts` | `ZatcaModule` |
 | `LedgerModule` | `apps/api/src/ledger/ledger.module.ts` | — |
 | `NotificationsModule` | `apps/api/src/notifications/notifications.module.ts` | `InvoicesModule` |
 | `OrdersModule` | `apps/api/src/orders/orders.module.ts` | `InventoryModule`, `NotificationsModule` |
@@ -101,7 +100,7 @@ graph LR
 
 ## Engineering decisions
 
-39 recorded in `docs/ENGINEERING-DECISIONS.md`. "Cited by" counts source
+41 recorded in `docs/ENGINEERING-DECISIONS.md`. "Cited by" counts source
 files that reference the decision in a comment — an uncited decision is not wrong,
 but it is the first place to look when something has quietly been undone.
 
@@ -127,7 +126,7 @@ but it is the first place to look when something has quietly been undone.
 | `D-018` | Stripe is the source of truth for subscription state | 1 file(s) |
 | `D-019` | Stripe SDK v22 field relocations | — |
 | `D-020` | Billing degrades, it does not crash | — |
-| `D-021` | Invoice PDFs are Latin-only for now | 1 file(s) |
+| `D-021` | Invoice PDFs are Latin-only for now — **superseded by D-040** | — |
 | `D-022` | Invoices are generated, not stored-and-served | — |
 | `D-023` | Invoicing triggers on delivery | — |
 | `D-024` | Partial covering index for the dashboard aggregation | 2 file(s) |
@@ -146,12 +145,14 @@ but it is the first place to look when something has quietly been undone.
 | `D-037` | VAT on split payments is a remainder, not a per-payment split | 1 file(s) |
 | `D-038` | Document numbers need an atomic counter, not `count(*) + 1` | 3 file(s) |
 | `D-039` | `FOR UPDATE` on the latest row does not serialise inserts | 1 file(s) |
+| `D-040` | Arabic invoices need a font, not a shaping engine | 2 file(s) |
+| `D-041` | Creating an invoice issues it; the PDF is rendered after | — |
 
 ## Tests
 
 | Suite | Files | Declared cases |
 | --- | --- | --- |
-| unit | 9 | 103 |
+| unit | 10 | 111 |
 | e2e | 0 | 0 |
 
 Counts are parsed from `it(` / `test(` call sites, so they include any case that is
@@ -161,6 +162,7 @@ currently skipped. They are a shape check, not a substitute for running the suit
 
 | Commit | Date | Subject |
 | --- | --- | --- |
+| `b685805` | 2026-07-26 | @ Stop the graph hook from dirtying the index on unrelated commands |
 | `871ab64` | 2026-07-26 | @ Label the graph header honestly when it is generated pre-commit |
 | `6975af1` | 2026-07-26 | @ Derive the project memory graph from the repo instead of recalling it |
 | `b137d23` | 2026-07-26 | Fix two concurrency bugs found by load-testing the counter |

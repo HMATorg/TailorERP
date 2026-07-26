@@ -13,7 +13,6 @@ import { InvoicesService } from '../invoices/invoices.service';
 import { LedgerService } from '../ledger/ledger.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { WorkshopService } from '../workshop/workshop.service';
-import { ZatcaService } from '../zatca/zatca.service';
 import type { PosCheckoutDto } from './dto/pos.dto';
 
 /**
@@ -34,7 +33,6 @@ export class PosService {
     private readonly reservations: ReservationService,
     private readonly workshop: WorkshopService,
     private readonly invoices: InvoicesService,
-    private readonly zatca: ZatcaService,
     private readonly ledger: LedgerService,
     private readonly counters: CounterService,
     private readonly audit: AuditService,
@@ -262,8 +260,9 @@ export class PosService {
     let invoice = null;
     let invoiceError: string | null = null;
     try {
-      const created = await this.invoices.createForOrder(order.id, userId);
-      invoice = await this.zatca.issue(created.id, userId);
+      // createForOrder issues to ZATCA before rendering, so this returns a
+      // fully-formed tax invoice — VAT split, hash chain slot, and QR included.
+      invoice = await this.invoices.createForOrder(order.id, userId);
     } catch (err) {
       // A missing tax invoice is a compliance problem, not a log line — the
       // counter must know before handing goods over.

@@ -9,7 +9,32 @@ import { AuditService } from '../audit/audit.service';
 import { CounterService } from '../common/counter.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
-import { InvoicePdfService } from './invoice-pdf.service';
+import { ZatcaService } from '../zatca/zatca.service';
+import { KSA_VAT_RATE, splitInclusive } from '../zatca/zatca-vat';
+import { InvoicePdfService, type InvoiceData } from './invoice-pdf.service';
+
+/** The invoice fields the PDF needs; narrower than the full Prisma payload. */
+type InvoiceRow = {
+  invoiceNumber: string;
+  issuedAt: Date;
+  netAmount: Prisma.Decimal;
+  vatAmount: Prisma.Decimal;
+  vatRate: Prisma.Decimal;
+  totalAmount: Prisma.Decimal;
+  qrCodeBase64: string | null;
+  zatcaInvoiceType: string;
+};
+
+const ORDER_INCLUDE = {
+  organization: {
+    select: { name: true, taxId: true, vatNumber: true, defaultCurrency: true },
+  },
+  store: { select: { name: true, address: true, phone: true } },
+  customer: { select: { fullName: true, phone: true } },
+  items: true,
+} satisfies Prisma.OrderInclude;
+
+type OrderWithRelations = Prisma.OrderGetPayload<{ include: typeof ORDER_INCLUDE }>;
 
 @Injectable()
 export class InvoicesService {
@@ -21,6 +46,7 @@ export class InvoicesService {
     private readonly storage: StorageService,
     private readonly counters: CounterService,
     private readonly audit: AuditService,
+    private readonly zatca: ZatcaService,
   ) {}
 
   /** Sequential per-org invoice number, e.g. INV-2026-000042. */
@@ -38,45 +64,30 @@ export class InvoicesService {
   }
 
   /**
-   * Creates the invoice record and renders its PDF (PRD W-3).
-   * Idempotent: an order already invoiced returns the existing record.
+   * Maps an invoice and its order onto the PDF's inputs.
+   *
+   * The tax block comes off the invoice row, which `ZatcaService.issue` fills
+   * in. Rows predating issuance carry zeroes, so the split is recomputed here
+   * rather than printing "VAT 0.00" on a document whose total plainly includes
+   * VAT.
    */
-  async createForOrder(orderId: string, actorId?: string) {
-    const existing = await this.prisma.invoice.findUnique({ where: { orderId } });
-    if (existing) return existing;
-
-    const order = await this.prisma.order.findUnique({
-      where: { id: orderId },
-      include: {
-        organization: { select: { name: true, taxId: true, defaultCurrency: true } },
-        store: { select: { name: true, address: true, phone: true } },
-        customer: { select: { fullName: true, phone: true } },
-        items: true,
-      },
-    });
-    if (!order) throw new NotFoundException('Order not found');
-
-    const invoice = await this.prisma.$transaction(async (tx) => {
-      const invoiceNumber = await this.nextInvoiceNumber(tx, order.organizationId);
-      return tx.invoice.create({
-        data: {
-          organizationId: order.organizationId,
-          orderId: order.id,
-          invoiceNumber,
-          totalAmount: order.totalAmount,
-        },
-      });
-    });
-
+  private buildPdfData(invoice: InvoiceRow, order: OrderWithRelations): InvoiceData {
     const subtotal = order.items.reduce(
       (sum, i) => sum.add(new Prisma.Decimal(i.unitPrice).mul(i.quantity)),
       new Prisma.Decimal(0),
     );
 
-    const buffer = await this.pdf.generate({
+    const issued = !invoice.vatAmount.isZero() || !invoice.netAmount.isZero();
+    const fallback = splitInclusive(invoice.totalAmount, KSA_VAT_RATE);
+    const tax = issued
+      ? { net: invoice.netAmount, vat: invoice.vatAmount, rate: invoice.vatRate }
+      : { net: fallback.net, vat: fallback.vat, rate: fallback.rate };
+
+    return {
       invoiceNumber: invoice.invoiceNumber,
       issuedAt: invoice.issuedAt,
       organizationName: order.organization.name,
+      organizationVatNumber: order.organization.vatNumber,
       organizationTaxId: order.organization.taxId,
       storeName: order.store.name,
       storeAddress: order.store.address,
@@ -93,11 +104,51 @@ export class InvoicesService {
       })),
       subtotal: subtotal.toString(),
       discount: order.discountAmount.toString(),
-      total: order.totalAmount.toString(),
+      total: invoice.totalAmount.toString(),
+      netAmount: tax.net.toString(),
+      vatAmount: tax.vat.toString(),
+      vatRate: tax.rate.toString(),
       paid: order.paidAmount.toString(),
+      qrCodeBase64: invoice.qrCodeBase64,
+      simplified: invoice.zatcaInvoiceType !== 'standard',
+    };
+  }
+
+  /**
+   * Creates the invoice record, issues it through ZATCA, then renders the PDF
+   * (PRD W-3). Idempotent: an order already invoiced returns the existing record.
+   *
+   * Issuance belongs here rather than at each call site, because the printed
+   * document is only a valid tax invoice once the VAT split and QR exist. While
+   * callers did it themselves, the PDF was rendered *before* issuance and went
+   * out with no VAT block and no QR — and the WhatsApp path never issued at all.
+   */
+  async createForOrder(orderId: string, actorId?: string) {
+    const existing = await this.prisma.invoice.findUnique({ where: { orderId } });
+    if (existing) return existing;
+
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: ORDER_INCLUDE,
+    });
+    if (!order) throw new NotFoundException('Order not found');
+
+    const created = await this.prisma.$transaction(async (tx) => {
+      const invoiceNumber = await this.nextInvoiceNumber(tx, order.organizationId);
+      return tx.invoice.create({
+        data: {
+          organizationId: order.organizationId,
+          orderId: order.id,
+          invoiceNumber,
+          totalAmount: order.totalAmount,
+        },
+      });
     });
 
-    // Storage is optional in dev; the invoice record stands without a PDF.
+    const invoice = await this.zatca.issue(created.id, actorId);
+    const buffer = await this.pdf.generate(this.buildPdfData(invoice, order));
+
+    // Storage is optional in dev; the invoice record stands without a stored PDF.
     if (this.storage.isEnabled()) {
       try {
         const key = `invoices/${order.organizationId}/${invoice.invoiceNumber}.pdf`;
@@ -126,51 +177,17 @@ export class InvoicesService {
   }
 
   /** Renders the PDF on demand — used for direct download without S3. */
-  async renderPdf(organizationId: string, invoiceId: string): Promise<{ buffer: Buffer; filename: string }> {
+  async renderPdf(
+    organizationId: string,
+    invoiceId: string,
+  ): Promise<{ buffer: Buffer; filename: string }> {
     const invoice = await this.prisma.invoice.findFirst({
       where: { id: invoiceId, organizationId },
-      include: {
-        order: {
-          include: {
-            organization: { select: { name: true, taxId: true, defaultCurrency: true } },
-            store: { select: { name: true, address: true, phone: true } },
-            customer: { select: { fullName: true, phone: true } },
-            items: true,
-          },
-        },
-      },
+      include: { order: { include: ORDER_INCLUDE } },
     });
     if (!invoice) throw new NotFoundException('Invoice not found');
 
-    const order = invoice.order;
-    const subtotal = order.items.reduce(
-      (sum, i) => sum.add(new Prisma.Decimal(i.unitPrice).mul(i.quantity)),
-      new Prisma.Decimal(0),
-    );
-
-    const buffer = await this.pdf.generate({
-      invoiceNumber: invoice.invoiceNumber,
-      issuedAt: invoice.issuedAt,
-      organizationName: order.organization.name,
-      organizationTaxId: order.organization.taxId,
-      storeName: order.store.name,
-      storeAddress: order.store.address,
-      storePhone: order.store.phone,
-      customerName: order.customer.fullName,
-      customerPhone: order.customer.phone,
-      orderNumber: order.orderNumber,
-      currency: order.organization.defaultCurrency,
-      lines: order.items.map((i) => ({
-        garmentType: i.garmentType,
-        description: i.description,
-        quantity: i.quantity,
-        unitPrice: i.unitPrice.toString(),
-      })),
-      subtotal: subtotal.toString(),
-      discount: order.discountAmount.toString(),
-      total: order.totalAmount.toString(),
-      paid: order.paidAmount.toString(),
-    });
+    const buffer = await this.pdf.generate(this.buildPdfData(invoice, invoice.order));
     return { buffer, filename: `${invoice.invoiceNumber}.pdf` };
   }
 
