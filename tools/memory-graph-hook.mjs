@@ -26,10 +26,11 @@ const emit = (o) => {
   process.exit(0);
 };
 
-const run = spawnSync(process.execPath, [join(ROOT, 'tools', 'memory-graph.mjs')], {
-  cwd: ROOT,
-  encoding: 'utf8',
-});
+const run = spawnSync(
+  process.execPath,
+  [join(ROOT, 'tools', 'memory-graph.mjs'), ...(mode === 'commit' ? ['--pending-commit'] : [])],
+  { cwd: ROOT, encoding: 'utf8' },
+);
 
 // A broken generator must not become a broken commit.
 if (run.error || run.stdout == null) {

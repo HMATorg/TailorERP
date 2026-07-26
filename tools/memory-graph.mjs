@@ -14,6 +14,10 @@
  *   node tools/memory-graph.mjs            write the graph, report drift
  *   node tools/memory-graph.mjs --check    report only, write nothing
  *   node tools/memory-graph.mjs --quiet    suppress the human summary
+ *   node tools/memory-graph.mjs --pending-commit
+ *                                          a commit is about to be created from
+ *                                          the index; label HEAD as the parent
+ *                                          so the committed file reads honestly
  */
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync, existsSync, readdirSync, statSync } from 'node:fs';
@@ -25,6 +29,7 @@ const OUT = join(ROOT, 'docs', 'MEMORY-GRAPH.md');
 const args = new Set(process.argv.slice(2));
 const CHECK_ONLY = args.has('--check');
 const QUIET = args.has('--quiet');
+const PENDING_COMMIT = args.has('--pending-commit');
 
 const git = (...a) => {
   try {
@@ -253,7 +258,21 @@ lines.push('> log. Hand edits are lost on the next run. Judgment that cannot be 
 lines.push('> the repo — why something is blocked, what a trap looks like — belongs in the');
 lines.push('> auto-memory directory, not here.');
 lines.push('');
-lines.push(`**HEAD** \`${head}\` on \`${branch}\` · **generated** ${now} · **working tree** ${dirty ? `${dirty.split('\n').length} file(s) uncommitted` : 'clean'}`);
+if (PENDING_COMMIT) {
+  // Written from the index moments before `git commit` runs, so `head` is about
+  // to become the parent and the History table below stops one row short of the
+  // commit this file is being carried in. Say so, rather than let a later reader
+  // mistake a one-commit lag for a stale graph.
+  lines.push(
+    `**Parent** \`${head}\` on \`${branch}\` · **generated** ${now} · staged into the commit being created on top of it`,
+  );
+  lines.push('');
+  lines.push('_History below runs to the parent; the commit carrying this file is its child._');
+} else {
+  lines.push(
+    `**HEAD** \`${head}\` on \`${branch}\` · **generated** ${now} · **working tree** ${dirty ? `${dirty.split('\n').length} file(s) uncommitted` : 'clean'}`,
+  );
+}
 lines.push('');
 
 // --- drift ------------------------------------------------------------------

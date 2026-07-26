@@ -6,7 +6,9 @@
 > the repo — why something is blocked, what a trap looks like — belongs in the
 > auto-memory directory, not here.
 
-**HEAD** `b137d23` on `main` · **generated** 2026-07-26 14:47Z · **working tree** 7 file(s) uncommitted
+**Parent** `6975af1` on `main` · **generated** 2026-07-26 14:48Z · staged into the commit being created on top of it
+
+_History below runs to the parent; the commit carrying this file is its child._
 
 ## Drift
 
@@ -159,6 +161,7 @@ currently skipped. They are a shape check, not a substitute for running the suit
 
 | Commit | Date | Subject |
 | --- | --- | --- |
+| `6975af1` | 2026-07-26 | @ Derive the project memory graph from the repo instead of recalling it |
 | `b137d23` | 2026-07-26 | Fix two concurrency bugs found by load-testing the counter |
 | `21a995b` | 2026-07-26 | Add double-entry ledger: deposits as liability, realised on handover |
 | `1748eb1` | 2026-07-26 | Add tablet POS app: counter flow, measurement diagram, workshop Kanban |
