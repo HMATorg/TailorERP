@@ -594,3 +594,85 @@ as filed when it was not.
 - **No query still returns something**: the eight most recently-updated customers, so the
   counter is never a blank box waiting for input. Recency is a proxy for "who's likely
   walking back in," not a claim about loyalty or spend.
+
+## D-046: The counter registers walk-ins itself, no admin round-trip
+
+- **Problem:** creating a customer (`manage_customers`) and taking their first measurement
+  (`manage_measurements`) were both store-manager-and-above permissions, per D-043's original
+  split. In practice this meant a walk-in customer with no existing record — the ordinary case
+  for a tailor shop, not the exception — had to wait while the cashier found a manager or,
+  worse, went into the separate admin app to create the record before the counter could do
+  anything at all. That is exactly the "multilevel intervention" a point of sale exists to
+  avoid.
+- **Decision:** `cashier` gains `manage_customers` and `manage_measurements`. No new backend
+  endpoints were needed: `POST /customers` and `POST /customers/:id/measurements` already did
+  the right thing — org-scoped uniqueness check, `preferredStoreId` set from `X-Store-Id`,
+  a `CustomerStoreVisit` row, and a full `customer.created` audit entry with actor/store/IP.
+  They were simply unreachable from the counter's own role.
+- **`manage_orders`, `manage_workshop`, and the rest of D-043's split are untouched.** This is
+  specifically about the two permissions that gate "can this walk-in be served at all," not a
+  general loosening of the cashier role — a cashier still cannot edit an existing order's
+  structure or touch the workshop board.
+- **Admin's oversight role does not change.** `GET /customers/:id` already returns the full
+  record — measurements (every version), visit history, order/appointment counts — server-side;
+  the admin app simply never had a UI to show it (see the accompanying fix). Nothing about
+  giving the counter write access removes anything from what HQ can see.
+
+## D-047: Print Center — thermal, garment-tag barcodes, and the A4 invoice are three documents, not one
+
+- **Problem:** the counter had exactly one print action (`window.print()` on the on-screen
+  confirmation), and no way to produce a proper thermal receipt, a scannable garment tag, or
+  the already-built ZATCA A4 PDF from the same order.
+- **Decision:** three documents, one order:
+  - **Thermal receipt** — a compact 80mm layout (Courier, dashed rules, itemised lines,
+    VAT breakdown, ZATCA QR) shown via a `print-only` section that `print.css` reveals only
+    while `<body class="printing-thermal">`, toggled by JS right before `window.print()`.
+  - **Garment tags** — one Code128-barcoded label per production ticket, sized for a common
+    label roll (`62mm × 100mm`), printed the same way under `printing-tags`.
+  - **A4 tax invoice** — not re-implemented. Fetched as a blob from the already-existing
+    `GET /invoices/:id/download` (D-040–D-042) and opened in a new tab, so the browser's own
+    PDF viewer supplies the print button for the document that already carries the seller's
+    VAT number, the full net/VAT/gross breakdown, and the tamper-evident hash chain.
+- **No raw ESC/POS.** There is no web API for a page to talk to a thermal printer directly
+  without native access; every browser-based POS reaches one the same way — CSS controlling
+  what a page looks like, the OS print dialog, and the printer's own driver doing the
+  conversion. `@page` size here is a hint the driver is free to override with whatever stock
+  is actually loaded.
+- **Why Code128 for the tag, not the QR already used for ZATCA:** the workshop's own
+  barcode-scan flow (`GET /workshop/tickets/by-code/:code`) only cares about the decoded text,
+  not the symbology — but the cheap 1D-only scanners common on a shop floor cannot read a QR
+  at the print size a fabric tag allows. `jsbarcode` renders Code128 client-side; no server
+  round trip.
+- **Garment tags need per-item data the checkout response never carried** — `tickets` used to
+  return only `{id, ticketCode, station}`. Enriched with `garmentType` by zipping with the
+  already-in-scope `prepared` array by index (`createTicketsForOrder` creates one ticket per
+  `order.items` row in `sequenceNo` order, which is the same order `prepared` was built in —
+  see `pos.service.ts`), rather than a second query.
+- **The login response now also carries `organization.vatNumber`/`taxId`**, so the thermal
+  receipt can show the seller's VAT registration without a second request — the same field
+  `InvoicePdfService` already prints on the A4 invoice. Additive only; nothing existing was
+  removed or renamed from the response shape.
+- **The A4 button opens its target tab *before* the fetch, not after.** The first version
+  fetched the PDF blob and only then called `window.open(blobUrl, '_blank')`; several browsers'
+  popup blockers treat the user-activation window from the click as expired by the time an
+  `await` resolves, so the call can silently no-op even though the request itself succeeds.
+  `window.open('', '_blank')` now runs synchronously inside the click handler — a blank tab is
+  a trusted-gesture action no blocker rejects — and the tab's `location` is set once the blob
+  is ready; a null return (pop-ups disabled outright) falls back to same-tab navigation instead
+  of leaving the cashier with no way to reach the PDF at all.
+
+## D-048: `cashier` needs `view_inventory` because checkout structurally requires it
+
+- **Bug found while live-testing D-046 as an actual cashier account** (not hq_admin, who
+  already held every permission and so never exercised this path): the fabric-roll picker on
+  Counter — `GET /inventory/sellable`, gated by `view_inventory` — 403'd. A cashier could never
+  complete *any* checkout through the counter UI, new customer or existing, because selecting a
+  roll to reserve is not optional; it is step 3 of the one order-creation flow the role exists
+  to run. This predates today's work — it was a gap in D-043's original cashier scope, just
+  never exercised because every prior session tested as hq_admin or store_manager.
+- **Decision:** add `view_inventory` to `cashier`'s defaults. This is not "let cashiers manage
+  stock" — `manage_inventory`, `select_batches`, `transfer_inventory` stay out of reach; this is
+  specifically the read permission the counter's own screen depends on to render at all.
+- **Caught by using a real seeded cashier account for the first time**, not by reasoning about
+  the permission table in the abstract — the lesson generalises: a new role's defaults are not
+  actually verified until something runs the entire workflow as that role, end to end.

@@ -25,7 +25,7 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({
       where: { email: email.toLowerCase() },
       include: {
-        organization: { select: { id: true, name: true, status: true } },
+        organization: { select: { id: true, name: true, status: true, vatNumber: true, taxId: true } },
         storeRoles: {
           where: { isActive: true },
           include: { store: { select: { id: true, name: true, status: true } } },
@@ -78,7 +78,15 @@ export class AuthService {
         email: user.email,
         fullName: user.fullName,
         orgRole: user.orgRole,
-        organization: { id: user.organization.id, name: user.organization.name },
+        organization: {
+          id: user.organization.id,
+          name: user.organization.name,
+          // Carried so any print surface (thermal receipt, garment tags) can
+          // show the seller's VAT registration without a second request —
+          // the same number InvoicePdfService already prints on the A4 invoice.
+          vatNumber: user.organization.vatNumber,
+          taxId: user.organization.taxId,
+        },
         storeRoles: user.storeRoles.map((r) => ({ storeId: r.storeId, role: r.role })),
       },
       stores,

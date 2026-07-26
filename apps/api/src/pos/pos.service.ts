@@ -346,11 +346,23 @@ export class PosService {
     return {
       id: order.id,
       orderNumber: order.orderNumber,
+      customerName: customer.fullName,
+      dueDate: order.dueDate,
       totalAmount: order.totalAmount.toFixed(2),
       paidAmount: order.paidAmount.toFixed(2),
       balanceDue: order.totalAmount.minus(order.paidAmount).toFixed(2),
       totalReservedMeters: totalReserved.toFixed(2),
-      tickets: tickets.map((t) => ({ id: t.id, ticketCode: t.ticketCode, station: t.station })),
+      // Zipped with `prepared` by index rather than re-queried: createTicketsForOrder
+      // creates one ticket per order.item in sequenceNo order, and order.items were
+      // created by iterating `prepared` in that same order, so index i is the same
+      // garment in both arrays. Carrying garmentType here is what lets Receipt print
+      // a garment tag per ticket without a second round trip.
+      tickets: tickets.map((t, i) => ({
+        id: t.id,
+        ticketCode: t.ticketCode,
+        station: t.station,
+        garmentType: prepared[i]?.item.garmentType ?? t.orderItemId,
+      })),
       invoiceError,
       invoice: invoice && {
         id: invoice.id,

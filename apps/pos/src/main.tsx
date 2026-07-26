@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { ConfigProvider } from 'antd';
 import App from './App';
+import './print.css';
 
 // Counter tablets: larger controls and touch targets than the admin desk app.
 ReactDOM.createRoot(document.getElementById('root')!).render(

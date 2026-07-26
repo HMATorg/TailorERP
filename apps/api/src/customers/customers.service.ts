@@ -58,12 +58,36 @@ export class CustomersService {
     return { items, meta: { page, pageSize, total } };
   }
 
+  /**
+   * The complete record HQ oversight needs for one customer: profile, which
+   * stores they've visited and when, recent order history, and activity
+   * counts. Deliberately does not carry measurements — that shape belongs to
+   * `MeasurementsService`, the one place it is grouped by garment and
+   * versioned consistently across every surface that shows it (D-044); a
+   * second ad hoc measurement select here would be exactly the kind of
+   * divergence that fixed.
+   */
   async getById(orgId: string, customerId: string) {
     const customer = await this.prisma.customer.findFirst({
       where: { id: customerId, organizationId: orgId },
       include: {
-        measurements: { orderBy: { createdAt: 'desc' }, take: 20 },
-        visits: { include: { store: { select: { id: true, name: true } } } },
+        visits: {
+          include: { store: { select: { id: true, name: true } } },
+          orderBy: { lastVisitDate: 'desc' },
+        },
+        orders: {
+          orderBy: { createdAt: 'desc' },
+          take: 10,
+          select: {
+            id: true,
+            orderNumber: true,
+            status: true,
+            totalAmount: true,
+            paidAmount: true,
+            createdAt: true,
+            store: { select: { name: true } },
+          },
+        },
         _count: { select: { orders: true, appointments: true } },
       },
     });

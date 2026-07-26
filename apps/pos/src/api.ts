@@ -10,8 +10,16 @@ export interface StoreSummary {
   isHeadquarters?: boolean;
 }
 
+export interface OrganizationSummary {
+  id: string;
+  name: string;
+  vatNumber: string | null;
+  taxId: string | null;
+}
+
 interface AuthState {
   user: { id: string; fullName: string | null; orgRole: string | null } | null;
+  organization: OrganizationSummary | null;
   stores: StoreSummary[];
   activeStoreId: string | null;
   accessToken: string | null;
@@ -26,6 +34,7 @@ export const useAuth = create<AuthState>()(
   persist(
     (set, get) => ({
       user: null,
+      organization: null,
       stores: [],
       activeStoreId: null,
       accessToken: null,
@@ -37,6 +46,7 @@ export const useAuth = create<AuthState>()(
         const store = data.stores.find((s: StoreSummary) => !s.isHeadquarters) ?? data.stores[0];
         set({
           user: data.user,
+          organization: data.user.organization,
           stores: data.stores,
           activeStoreId: store?.id ?? null,
           accessToken: data.accessToken,
@@ -44,7 +54,14 @@ export const useAuth = create<AuthState>()(
         });
       },
       logout: () =>
-        set({ user: null, stores: [], activeStoreId: null, accessToken: null, refreshToken: null }),
+        set({
+          user: null,
+          organization: null,
+          stores: [],
+          activeStoreId: null,
+          accessToken: null,
+          refreshToken: null,
+        }),
       setStore: (id) => set({ activeStoreId: id }),
       async tryRefresh() {
         const { refreshToken } = get();

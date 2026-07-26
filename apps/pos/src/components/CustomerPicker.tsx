@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { CloseCircleFilled, SearchOutlined, UserOutlined } from '@ant-design/icons';
-import { Avatar, Empty, Input, List, Spin, Tag, Typography } from 'antd';
+import { CloseCircleFilled, PlusOutlined, SearchOutlined, UserOutlined } from '@ant-design/icons';
+import { Avatar, Button, Empty, Input, List, Spin, Tag, Typography } from 'antd';
 import { api, errMsg } from '../api';
+import NewCustomerModal from './NewCustomerModal';
 
 export interface DirectoryCustomer {
   id: string;
@@ -40,6 +41,7 @@ export default function CustomerPicker({
   const [loading, setLoading] = useState(false);
   const [highlighted, setHighlighted] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [intakeOpen, setIntakeOpen] = useState(false);
   const inputRef = useRef<any>(null);
   const requestId = useRef(0);
 
@@ -113,22 +115,13 @@ export default function CustomerPicker({
         ) : results.length === 0 && !loading ? (
           <Empty
             image={Empty.PRESENTED_IMAGE_SIMPLE}
-            description={
-              query.trim() ? (
-                <>
-                  No customer matches "{query}"
-                  <div>
-                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                      Create them in the admin app, then search again.
-                    </Typography.Text>
-                  </div>
-                </>
-              ) : (
-                'No customers yet'
-              )
-            }
+            description={query.trim() ? `No customer matches "${query}"` : 'No customers yet'}
             style={{ marginBlockStart: 24 }}
-          />
+          >
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => setIntakeOpen(true)}>
+              Register new customer
+            </Button>
+          </Empty>
         ) : (
           <List
             size="large"
@@ -162,7 +155,29 @@ export default function CustomerPicker({
             )}
           />
         )}
+
+        {results.length > 0 && (
+          <Button
+            type="dashed"
+            block
+            icon={<PlusOutlined />}
+            style={{ marginBlockStart: 12 }}
+            onClick={() => setIntakeOpen(true)}
+          >
+            Not them — register a new customer
+          </Button>
+        )}
       </div>
+
+      <NewCustomerModal
+        open={intakeOpen}
+        initialQuery={query}
+        onCancel={() => setIntakeOpen(false)}
+        onCreated={(id) => {
+          setIntakeOpen(false);
+          onSelect(id);
+        }}
+      />
     </div>
   );
 }

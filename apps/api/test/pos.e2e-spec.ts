@@ -214,6 +214,11 @@ describe('POS checkout (e2e)', () => {
     expect(res.body.tickets).toHaveLength(3);
     expect(res.body.totalReservedMeters).toBe('11.46');
 
+    // Carried so Receipt can print a garment tag per ticket without a second
+    // round trip; must line up with the item it was actually cut from.
+    expect(res.body.tickets.every((t: { garmentType: string }) => t.garmentType === 'Thobe')).toBe(true);
+    expect(res.body.customerName).toEqual(expect.any(String));
+
     // Regression: the response must reflect the deposit, not the pre-update row.
     // Returning the stale order printed a receipt claiming the full amount was due.
     expect(res.body.paidAmount).toBe('600.00');

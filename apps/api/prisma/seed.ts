@@ -153,10 +153,19 @@ async function main() {
       organizationId: org.id,
     },
   });
+  const cashier = await prisma.user.create({
+    data: {
+      email: 'cashier.jeddah@alanwar.example',
+      passwordHash,
+      fullName: 'Rania Aziz',
+      organizationId: org.id,
+    },
+  });
   await prisma.userStoreRole.createMany({
     data: [
       { userId: manager.id, storeId: branch.id, role: 'store_manager' },
       { userId: tailor.id, storeId: branch.id, role: 'tailor' },
+      { userId: cashier.id, storeId: branch.id, role: 'cashier' },
     ],
   });
 
@@ -236,8 +245,12 @@ async function main() {
     },
   });
 
-  console.log('Seeded demo tenant: Al Anwar Tailors (2 stores, 4 staff, 1 customer)');
-  console.log('Logins — HQ admin: owner@alanwar.example, manager: manager.jeddah@alanwar.example (password: Tailonix@Dev1)');
+  console.log('Seeded demo tenant: Al Anwar Tailors (2 stores, 4 tenant staff, 1 customer)');
+  console.log(
+    'Logins (password: Tailonix@Dev1) — HQ admin: owner@alanwar.example, ' +
+      'manager: manager.jeddah@alanwar.example, tailor: tailor.jeddah@alanwar.example, ' +
+      'cashier: cashier.jeddah@alanwar.example',
+  );
 }
 
 main()

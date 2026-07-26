@@ -89,14 +89,21 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<StaffRole, readonly Permission[]> 
     'view_workshop',
     'manage_workshop',
   ],
-  // Works the counter: takes orders and money, reads the active measurement to
-  // quote fabric. No workshop, no measurement editing.
+  // Works the counter: takes orders and money, and — per D-046 — registers a
+  // walk-in customer and takes their first measurements without needing a
+  // manager or the admin app in the loop. `view_inventory` is here because
+  // checkout structurally requires it — GET /inventory/sellable is what fills
+  // the fabric-roll picker — not because a cashier manages stock (D-048).
+  // No workshop.
   cashier: [
     'view_orders',
     'create_orders',
     'process_payments',
     'view_customers',
+    'manage_customers',
     'view_measurements',
+    'manage_measurements',
+    'view_inventory',
     'use_pos',
     'pos_checkout',
     'pos_settle',

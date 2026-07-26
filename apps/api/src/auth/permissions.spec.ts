@@ -32,9 +32,33 @@ describe('computeEffectivePermissions (TRD §4.1)', () => {
     expect(tailor.has('use_pos')).toBe(false);
     expect(tailor.has('pos_checkout')).toBe(false);
 
-    // Measurements stay read-only for everyone who does not take them.
+    // Measurements stay read-only for staff who work the floor but don't run
+    // the counter — a tailor cuts to the record, they don't edit it.
     expect(tailor.has('manage_measurements')).toBe(false);
-    expect(cashier.has('manage_measurements')).toBe(false);
+  });
+
+  it('lets the counter register a walk-in and take their measurements (D-046)', () => {
+    // Before this, only manage_customers holders (store_manager+) could create
+    // a customer — a cashier had to route every walk-in through someone else,
+    // which is exactly the "wait for admin" friction the counter exists to avoid.
+    const cashier = computeEffectivePermissions('cashier');
+    expect(cashier.has('manage_customers')).toBe(true);
+    expect(cashier.has('manage_measurements')).toBe(true);
+    // Still no back-office order administration or workshop access.
+    expect(cashier.has('manage_orders')).toBe(false);
+    expect(cashier.has('manage_workshop')).toBe(false);
+  });
+
+  it('lets the counter see fabric stock so checkout can actually run (D-048)', () => {
+    // GET /inventory/sellable fills the fabric-roll picker Counter's own
+    // checkout depends on — found by running the whole flow as a real
+    // cashier account for the first time, not by auditing the table by eye.
+    const cashier = computeEffectivePermissions('cashier');
+    expect(cashier.has('view_inventory')).toBe(true);
+    // Read-only: managing stock, batches, or transfers is still out of reach.
+    expect(cashier.has('manage_inventory')).toBe(false);
+    expect(cashier.has('select_batches')).toBe(false);
+    expect(cashier.has('transfer_inventory')).toBe(false);
   });
 
   it('cashier defaults match PRD §4.6', () => {

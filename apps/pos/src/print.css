@@ -1,0 +1,92 @@
+/**
+ * Print Center (D-047). One physical receipt page hides three different
+ * layouts — the on-screen confirmation, a compact thermal receipt, and a
+ * strip of garment-tag labels — and JS toggles a body class immediately
+ * before calling window.print() to choose which one becomes visible.
+ *
+ * This is the standard way a browser reaches a shop's thermal/label printer:
+ * there is no web API for raw ESC/POS from a page without native access, so
+ * every browser-based POS (this includes the well-known commercial ones)
+ * prints through the OS print dialog and lets the printer's own driver do the
+ * conversion. `@page` size is a hint the driver is free to override with
+ * whatever paper the physical printer actually has loaded.
+ */
+
+@media screen {
+  .print-only {
+    display: none !important;
+  }
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  /* Default: nothing print-only is shown unless a specific mode is active —
+     printing the confirmation screen as-is (Ctrl+P without picking a Print
+     Center action) should still look reasonable, so screen-only content stays
+     visible in that fallback case. */
+  .print-only {
+    display: none !important;
+  }
+
+  body.printing-thermal .print-only.thermal-receipt,
+  body.printing-tags .print-only.garment-tags {
+    display: block !important;
+  }
+
+  body.printing-thermal .screen-only,
+  body.printing-tags .screen-only {
+    display: none !important;
+  }
+
+  .thermal-receipt {
+    width: 100%;
+    font-family: 'Courier New', monospace;
+    color: #000;
+  }
+  .thermal-receipt .center {
+    text-align: center;
+  }
+  .thermal-receipt .rule {
+    border-top: 1px dashed #000;
+    margin: 6px 0;
+  }
+  .thermal-receipt .row {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .thermal-receipt .bold {
+    font-weight: 700;
+  }
+  .thermal-receipt .small {
+    font-size: 10px;
+  }
+
+  .garment-tags {
+    display: flex;
+    flex-direction: column;
+    gap: 3mm;
+  }
+  .garment-tag {
+    box-sizing: border-box;
+    width: 100%;
+    padding: 2mm;
+    border: 1px dashed #999;
+    page-break-inside: avoid;
+    font-family: 'Courier New', monospace;
+  }
+  .garment-tag + .garment-tag {
+    page-break-before: always;
+  }
+  .garment-tag .tag-title {
+    font-size: 11px;
+    font-weight: 700;
+  }
+  .garment-tag .tag-meta {
+    font-size: 9px;
+    line-height: 1.4;
+  }
+}

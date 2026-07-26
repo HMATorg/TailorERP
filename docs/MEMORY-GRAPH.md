@@ -6,7 +6,7 @@
 > the repo — why something is blocked, what a trap looks like — belongs in the
 > auto-memory directory, not here.
 
-**Parent** `c07ca9c` on `main` · **generated** 2026-07-26 20:03Z · staged into the commit being created on top of it
+**Parent** `ebbc49b` on `main` · **generated** 2026-07-26 21:09Z · staged into the commit being created on top of it
 
 _History below runs to the parent; the commit carrying this file is its child._
 
@@ -44,10 +44,10 @@ graph LR
 
 | App | Package | Dev port | TS/TSX files | Direct deps |
 | --- | --- | --- | --- | --- |
-| `apps/admin` | `@tailonix/admin` | 5173 | 23 | 11 |
-| `apps/api` | `@tailonix/api` | 3000 | 124 | 21 |
+| `apps/admin` | `@tailonix/admin` | 5173 | 24 | 11 |
+| `apps/api` | `@tailonix/api` | 3000 | 125 | 21 |
 | `apps/platform-admin` | `@tailonix/platform-admin` | 5175 | 8 | 8 |
-| `apps/pos` | `@tailonix/pos` | 5176 | 9 | 12 |
+| `apps/pos` | `@tailonix/pos` | 5176 | 12 | 13 |
 | `apps/pwa` | `@tailonix/pwa` | 5174 | 14 | 9 |
 
 ## API modules
@@ -105,7 +105,7 @@ graph LR
 
 ## Engineering decisions
 
-45 recorded in `docs/ENGINEERING-DECISIONS.md`. "Cited by" counts source
+48 recorded in `docs/ENGINEERING-DECISIONS.md`. "Cited by" counts source
 files that reference the decision in a comment — an uncited decision is not wrong,
 but it is the first place to look when something has quietly been undone.
 
@@ -154,14 +154,17 @@ but it is the first place to look when something has quietly been undone.
 | `D-041` | Creating an invoice issues it; the PDF is rendered after | 1 file(s) |
 | `D-042` | The invoice footer anchors to the page box, not a constant | 1 file(s) |
 | `D-043` | POS and the workshop get their own permissions | 2 file(s) |
-| `D-044` | One read model for measurements, and it is read-only | 1 file(s) |
+| `D-044` | One read model for measurements, and it is read-only | 2 file(s) |
 | `D-045` | The counter can browse and search customers, not just look one up exactly | 1 file(s) |
+| `D-046` | The counter registers walk-ins itself, no admin round-trip | 5 file(s) |
+| `D-047` | Print Center — thermal, garment-tag barcodes, and the A4 invoice are three documents, not one | 3 file(s) |
+| `D-048` | `cashier` needs `view_inventory` because checkout structurally requires it | 2 file(s) |
 
 ## Tests
 
 | Suite | Files | Declared cases |
 | --- | --- | --- |
-| unit | 12 | 128 |
+| unit | 12 | 130 |
 | e2e | 0 | 0 |
 
 Counts are parsed from `it(` / `test(` call sites, so they include any case that is
@@ -171,6 +174,7 @@ currently skipped. They are a shape check, not a substitute for running the suit
 
 | Commit | Date | Subject |
 | --- | --- | --- |
+| `ebbc49b` | 2026-07-27 | Add rush-hour customer search to Counter (directory + name/phone search) |
 | `c07ca9c` | 2026-07-26 | Fix invoice page overflow; split POS/workshop RBAC; open up measurements |
 | `fff88f3` | 2026-07-26 | Drop the hook pre-filter that was missing real commits |
 | `252b394` | 2026-07-26 | Make the printed invoice a valid KSA tax invoice |

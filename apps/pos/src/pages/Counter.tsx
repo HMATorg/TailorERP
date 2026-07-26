@@ -195,7 +195,12 @@ export default function Counter() {
           unitPrice: g.unitPrice,
         })),
       });
-      navigate(`/receipt/${data.id}`, { state: data });
+      // The checkout response carries totals but not a per-garment price
+      // breakdown, so Receipt needs the submitted lines too — exactly what was
+      // charged, not a re-derivation of it.
+      navigate(`/receipt/${data.id}`, {
+        state: { ...data, lines: garments.map((g) => ({ garmentType: g.garmentType, unitPrice: g.unitPrice })) },
+      });
     } catch (e) {
       message.error(errMsg(e));
     } finally {

@@ -14,6 +14,7 @@ import {
 } from 'antd';
 import { api, errMsg } from '../api/client';
 import { useAuthStore } from '../stores/auth';
+import CustomerDetailDrawer from '../components/CustomerDetailDrawer';
 
 interface CustomerRow {
   id: string;
@@ -33,6 +34,7 @@ export default function Customers() {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -72,6 +74,7 @@ export default function Customers() {
         loading={loading}
         dataSource={rows}
         pagination={{ current: page, total, pageSize: 25, onChange: setPage, showSizeChanger: false }}
+        onRow={(r) => ({ onClick: () => setSelectedId(r.id), style: { cursor: 'pointer' } })}
         columns={[
           { title: 'Name', dataIndex: 'fullName' },
           { title: 'Phone', dataIndex: 'phone' },
@@ -131,6 +134,8 @@ export default function Customers() {
           </Button>
         </Form>
       </Modal>
+
+      <CustomerDetailDrawer customerId={selectedId} onClose={() => setSelectedId(null)} />
     </Space>
   );
 }
