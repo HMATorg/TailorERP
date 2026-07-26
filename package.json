@@ -15,6 +15,8 @@
     "build": "npm run build -w @tailonix/shared && npm run build -w @tailonix/api && npm run build -w @tailonix/admin && npm run build -w @tailonix/pwa && npm run build -w @tailonix/platform-admin && npm run build -w @tailonix/pos",
     "postinstall": "npm run build -w @tailonix/shared",
     "test": "npm run test --workspaces --if-present",
+  "graph": "node tools/memory-graph.mjs",
+  "graph:check": "node tools/memory-graph.mjs --check",
     "lint": "npm run lint --workspaces --if-present",
     "db:migrate": "npm run prisma:migrate -w @tailonix/api",
     "db:seed": "npm run prisma:seed -w @tailonix/api",

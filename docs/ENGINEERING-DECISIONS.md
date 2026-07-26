@@ -133,6 +133,11 @@ npm workspaces (no pnpm dependency on dev machines). Node 24, TypeScript 5 stric
   chains is two customer rows; profiles are shared **within** an org across its stores
   (PRD hybrid-tenancy requirement), never across orgs.
 
+## D-014: Validation library
+
+- **Decision:** `class-validator` + `class-transformer` DTOs (canonical NestJS style) rather
+  than Zod. TRD offers either; NestJS pipes integrate with class-validator out of the box.
+
 ## D-015: Notification channel priority and fallback
 
 - **Decision:** On `order.status.changed` the worker tries **WhatsApp first** when
@@ -449,8 +454,3 @@ as filed when it was not.
   no ICV gaps.
 - Harness kept at `apps/api/test/concurrency-harness.js`; run it against a live API
   after any change to reservation, numbering, or issuance.
-
-## D-014: Validation library
-
-- **Decision:** `class-validator` + `class-transformer` DTOs (canonical NestJS style) rather
-  than Zod. TRD offers either; NestJS pipes integrate with class-validator out of the box.
