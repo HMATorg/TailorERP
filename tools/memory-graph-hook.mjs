@@ -28,14 +28,15 @@ const emit = (o) => {
 };
 
 /**
- * The `if: "Bash(git commit*)"` filter in settings.json is not tight enough to
- * rely on alone — it was observed firing on a compound command that ran
- * `git status`, `node -e`, and `git log` and contained no `git commit` at all.
- * Left unguarded, that regenerates and `git add`s the graph on unrelated git
- * commands and leaves a staged file sitting in an otherwise clean index.
+ * This is the only gate on whether a commit-mode run does anything.
  *
- * So re-check the real command here. Keep the `if` as a cheap pre-filter; treat
- * this as the decision.
+ * settings.json deliberately carries no `if: "Bash(git commit*)"` pre-filter.
+ * That filter proved wrong in both directions: it fired on a compound command
+ * running `git status`, `node -e`, and `git log` with no commit in it, and it
+ * silently failed to fire on `cd repo && git commit ...` because the command
+ * did not start with `git` — so that commit shipped a stale graph, which is the
+ * one failure this whole mechanism exists to prevent. Running the hook on every
+ * Bash call and deciding here costs a few milliseconds and is not guesswork.
  */
 const isGitCommit = (cmd) =>
   // start of string or a shell separator, then `git`, then any global options

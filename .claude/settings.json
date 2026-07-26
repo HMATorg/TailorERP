@@ -8,7 +8,6 @@
           {
             "type": "command",
             "command": "node tools/memory-graph-hook.mjs commit",
-            "if": "Bash(git commit*)",
             "timeout": 60,
             "statusMessage": "Regenerating memory graph"
           }

@@ -6,7 +6,9 @@
 > the repo — why something is blocked, what a trap looks like — belongs in the
 > auto-memory directory, not here.
 
-**HEAD** `b685805` on `main` · **generated** 2026-07-26 16:12Z · **working tree** 12 file(s) uncommitted
+**Parent** `252b394` on `main` · **generated** 2026-07-26 16:16Z · staged into the commit being created on top of it
+
+_History below runs to the parent; the commit carrying this file is its child._
 
 ## Drift
 
@@ -31,7 +33,6 @@ graph LR
   Pos --> Inventory
   Pos --> Invoices
   Pos --> Workshop
-  Pos --> Zatca
   Team --> Notifications
   Workshop --> Inventory
 ```
@@ -67,7 +68,7 @@ graph LR
 | `NotificationsModule` | `apps/api/src/notifications/notifications.module.ts` | `InvoicesModule` |
 | `OrdersModule` | `apps/api/src/orders/orders.module.ts` | `InventoryModule`, `NotificationsModule` |
 | `PlatformModule` | `apps/api/src/platform/platform.module.ts` | `AuthModule` |
-| `PosModule` | `apps/api/src/pos/pos.module.ts` | `InventoryModule`, `InvoicesModule`, `WorkshopModule`, `ZatcaModule` |
+| `PosModule` | `apps/api/src/pos/pos.module.ts` | `InventoryModule`, `InvoicesModule`, `WorkshopModule` |
 | `PrismaModule` | `apps/api/src/prisma/prisma.module.ts` | — |
 | `RedisModule` | `apps/api/src/redis/redis.module.ts` | — |
 | `StorageModule` | `apps/api/src/storage/storage.module.ts` | — |
@@ -162,6 +163,7 @@ currently skipped. They are a shape check, not a substitute for running the suit
 
 | Commit | Date | Subject |
 | --- | --- | --- |
+| `252b394` | 2026-07-26 | Make the printed invoice a valid KSA tax invoice |
 | `b685805` | 2026-07-26 | @ Stop the graph hook from dirtying the index on unrelated commands |
 | `871ab64` | 2026-07-26 | @ Label the graph header honestly when it is generated pre-commit |
 | `6975af1` | 2026-07-26 | @ Derive the project memory graph from the repo instead of recalling it |
