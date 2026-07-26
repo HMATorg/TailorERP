@@ -21,9 +21,13 @@ This is enforced, not merely requested (`.claude/settings.json`):
 
 | When | What happens |
 | --- | --- |
-| `git commit` | Graph is regenerated and staged, so it ships in the same commit as the change it describes |
-| Session start | Graph is regenerated and its digest injected into context |
+| `git commit` | Graph is rewritten and staged, so it ships in the same commit as the change it describes |
+| Session start | Graph is recomputed **in memory** and its digest injected into context |
 | After compaction | Same — a compacted session re-anchors on the repo, not on the summary |
+
+Only the commit path writes the file. Session and post-compact runs pass `--check`, so they
+never leave a modified graph in an otherwise clean tree; the file on disk always matches what
+the last commit carried, and the digest you get injected is computed live either way.
 
 ### Drift is a defect
 

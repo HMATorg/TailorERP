@@ -15,6 +15,7 @@
  * Drift is surfaced as context to act on, not as a wall to climb.
  */
 import { execFileSync, spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -26,9 +27,45 @@ const emit = (o) => {
   process.exit(0);
 };
 
+/**
+ * The `if: "Bash(git commit*)"` filter in settings.json is not tight enough to
+ * rely on alone — it was observed firing on a compound command that ran
+ * `git status`, `node -e`, and `git log` and contained no `git commit` at all.
+ * Left unguarded, that regenerates and `git add`s the graph on unrelated git
+ * commands and leaves a staged file sitting in an otherwise clean index.
+ *
+ * So re-check the real command here. Keep the `if` as a cheap pre-filter; treat
+ * this as the decision.
+ */
+const isGitCommit = (cmd) =>
+  // start of string or a shell separator, then `git`, then any global options
+  // (`-c`, `--no-pager`, and the `key=value` that follows `-c`), then `commit`.
+  // Still a string match, so a command that merely quotes the text "git commit"
+  // trips it; the cost of that is a regenerated graph, which is why the write
+  // itself is confined to this path.
+  /(^|[\n;&|])\s*git\s+(-\S+\s+|\S+=\S+\s+)*commit\b/.test(cmd);
+
+if (mode === 'commit') {
+  let command = null;
+  try {
+    const raw = readFileSync(0, 'utf8');
+    if (raw.trim()) command = JSON.parse(raw)?.tool_input?.command ?? null;
+  } catch {
+    /* no stdin (manual run) or unparseable — fall through and do the work */
+  }
+  if (command !== null && !isGitCommit(command)) emit({ suppressOutput: true });
+}
+
+// Only the commit path writes. Session/compact runs use --check: they compute
+// the digest and drift findings live but leave the file alone, so starting a
+// session can never leave a modified graph sitting in a clean working tree.
+// The file on disk therefore always matches what the last commit carried.
 const run = spawnSync(
   process.execPath,
-  [join(ROOT, 'tools', 'memory-graph.mjs'), ...(mode === 'commit' ? ['--pending-commit'] : [])],
+  [
+    join(ROOT, 'tools', 'memory-graph.mjs'),
+    ...(mode === 'commit' ? ['--pending-commit'] : ['--check']),
+  ],
   { cwd: ROOT, encoding: 'utf8' },
 );
 

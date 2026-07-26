@@ -6,7 +6,7 @@
 > the repo — why something is blocked, what a trap looks like — belongs in the
 > auto-memory directory, not here.
 
-**Parent** `6975af1` on `main` · **generated** 2026-07-26 14:48Z · staged into the commit being created on top of it
+**Parent** `871ab64` on `main` · **generated** 2026-07-26 14:52Z · staged into the commit being created on top of it
 
 _History below runs to the parent; the commit carrying this file is its child._
 
@@ -161,6 +161,7 @@ currently skipped. They are a shape check, not a substitute for running the suit
 
 | Commit | Date | Subject |
 | --- | --- | --- |
+| `871ab64` | 2026-07-26 | @ Label the graph header honestly when it is generated pre-commit |
 | `6975af1` | 2026-07-26 | @ Derive the project memory graph from the repo instead of recalling it |
 | `b137d23` | 2026-07-26 | Fix two concurrency bugs found by load-testing the counter |
 | `21a995b` | 2026-07-26 | Add double-entry ledger: deposits as liability, realised on handover |
