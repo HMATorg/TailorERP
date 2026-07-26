@@ -9,11 +9,30 @@ import { PosService } from './pos.service';
 export class PosController {
   constructor(private readonly pos: PosService) {}
 
-  /** Phase 1: the clerk types a phone number. */
+  /** Phase 1 (legacy): the clerk types an exact phone number. */
   @Get('lookup')
   @RequirePermissions('use_pos', 'view_customers')
   lookup(@CurrentUser() principal: AccessTokenPayload, @Query('phone') phone: string) {
     return this.pos.lookupByPhone(principal.orgId!, phone);
+  }
+
+  /**
+   * Phase 1 (rush-hour picker): recent customers with no query, filtered by
+   * name/phone substring with one. Backs the search-as-you-type box so the
+   * counter never needs a customer's exact, correctly-formatted phone number
+   * before it can show anything.
+   */
+  @Get('customers')
+  @RequirePermissions('use_pos', 'view_customers')
+  directory(@CurrentUser() principal: AccessTokenPayload, @Query('search') search?: string) {
+    return this.pos.directory(principal.orgId!, search);
+  }
+
+  /** Opens the full profile for a customer picked from the directory. */
+  @Get('customers/:id')
+  @RequirePermissions('use_pos', 'view_customers')
+  lookupById(@CurrentUser() principal: AccessTokenPayload, @Param('id', ParseUUIDPipe) id: string) {
+    return this.pos.lookupById(principal.orgId!, id);
   }
 
   /** Phase 2: fabric metres this garment will need, before committing stock. */

@@ -6,7 +6,7 @@
 > the repo — why something is blocked, what a trap looks like — belongs in the
 > auto-memory directory, not here.
 
-**Parent** `fff88f3` on `main` · **generated** 2026-07-26 17:02Z · staged into the commit being created on top of it
+**Parent** `c07ca9c` on `main` · **generated** 2026-07-26 20:03Z · staged into the commit being created on top of it
 
 _History below runs to the parent; the commit carrying this file is its child._
 
@@ -47,7 +47,7 @@ graph LR
 | `apps/admin` | `@tailonix/admin` | 5173 | 23 | 11 |
 | `apps/api` | `@tailonix/api` | 3000 | 124 | 21 |
 | `apps/platform-admin` | `@tailonix/platform-admin` | 5175 | 8 | 8 |
-| `apps/pos` | `@tailonix/pos` | 5176 | 8 | 12 |
+| `apps/pos` | `@tailonix/pos` | 5176 | 9 | 12 |
 | `apps/pwa` | `@tailonix/pwa` | 5174 | 14 | 9 |
 
 ## API modules
@@ -105,7 +105,7 @@ graph LR
 
 ## Engineering decisions
 
-44 recorded in `docs/ENGINEERING-DECISIONS.md`. "Cited by" counts source
+45 recorded in `docs/ENGINEERING-DECISIONS.md`. "Cited by" counts source
 files that reference the decision in a comment — an uncited decision is not wrong,
 but it is the first place to look when something has quietly been undone.
 
@@ -155,6 +155,7 @@ but it is the first place to look when something has quietly been undone.
 | `D-042` | The invoice footer anchors to the page box, not a constant | 1 file(s) |
 | `D-043` | POS and the workshop get their own permissions | 2 file(s) |
 | `D-044` | One read model for measurements, and it is read-only | 1 file(s) |
+| `D-045` | The counter can browse and search customers, not just look one up exactly | 1 file(s) |
 
 ## Tests
 
@@ -170,6 +171,7 @@ currently skipped. They are a shape check, not a substitute for running the suit
 
 | Commit | Date | Subject |
 | --- | --- | --- |
+| `c07ca9c` | 2026-07-26 | Fix invoice page overflow; split POS/workshop RBAC; open up measurements |
 | `fff88f3` | 2026-07-26 | Drop the hook pre-filter that was missing real commits |
 | `252b394` | 2026-07-26 | Make the printed invoice a valid KSA tax invoice |
 | `b685805` | 2026-07-26 | @ Stop the graph hook from dirtying the index on unrelated commands |

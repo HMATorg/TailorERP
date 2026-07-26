@@ -38,10 +38,16 @@ export class PosService {
     private readonly audit: AuditService,
   ) {}
 
-  /** Phase 1: phone lookup returns the customer with their active frames. */
-  async lookupByPhone(orgId: string, phone: string) {
-    const customer = await this.prisma.customer.findUnique({
-      where: { organizationId_phone: { organizationId: orgId, phone } },
+  /**
+   * Shared by every "open a customer at the counter" path (phone, id, and the
+   * directory picker), so the shape the front end renders never diverges
+   * between them. `findFirst` rather than `findUnique` because it needs to
+   * accept either a phone or an id predicate — both are already unique, so
+   * this costs nothing over the compound-key lookup it replaces.
+   */
+  private async fullProfile(orgId: string, where: Prisma.CustomerWhereInput) {
+    const customer = await this.prisma.customer.findFirst({
+      where: { organizationId: orgId, ...where },
       include: {
         measurements: {
           where: { isActive: true },
@@ -54,10 +60,9 @@ export class PosService {
         },
       },
     });
-    if (!customer) return { found: false as const, phone };
+    if (!customer) return null;
 
     return {
-      found: true as const,
       customer: {
         id: customer.id,
         fullName: customer.fullName,
@@ -70,6 +75,54 @@ export class PosService {
       activeMeasurements: customer.measurements,
       recentOrders: customer.orders,
     };
+  }
+
+  /** Phase 1 (legacy path): exact-phone lookup, e.g. a barcode-scanned loyalty card. */
+  async lookupByPhone(orgId: string, phone: string) {
+    const profile = await this.fullProfile(orgId, { phone });
+    if (!profile) return { found: false as const, phone };
+    return { found: true as const, ...profile };
+  }
+
+  /** Phase 1 (directory path): opening a customer picked from the search list. */
+  async lookupById(orgId: string, customerId: string) {
+    const profile = await this.fullProfile(orgId, { id: customerId });
+    if (!profile) throw new NotFoundException('Customer not found in your organization');
+    return { found: true as const, ...profile };
+  }
+
+  /**
+   * Rush-hour customer picker (v4 §1 amendment). No query returns the most
+   * recently active customers — in practice the walk-ins a cashier is most
+   * likely to be serving again — so there is always something useful on
+   * screen the instant Counter opens, before anyone has typed a digit.
+   */
+  async directory(orgId: string, search?: string) {
+    const trimmed = search?.trim();
+    const customers = await this.prisma.customer.findMany({
+      where: {
+        organizationId: orgId,
+        isActive: true,
+        ...(trimmed
+          ? {
+              OR: [
+                { fullName: { contains: trimmed, mode: 'insensitive' } },
+                { phone: { contains: trimmed } },
+              ],
+            }
+          : {}),
+      },
+      orderBy: { updatedAt: 'desc' },
+      take: trimmed ? 20 : 8,
+      select: {
+        id: true,
+        fullName: true,
+        phone: true,
+        whatsappConsent: true,
+        lifetimeOrderCount: true,
+      },
+    });
+    return customers.map((c) => ({ ...c, tier: this.tierFor(c.lifetimeOrderCount) }));
   }
 
   /** Customer tier from lifetime garments (v4 §1). */

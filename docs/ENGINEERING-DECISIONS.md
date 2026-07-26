@@ -571,3 +571,26 @@ as filed when it was not.
 - `MeasurementsModule` is a shared provider module imported by the feature modules that
   consume it, not by `AppModule`. The memory-graph drift check was widened accordingly:
   a module is wired if *anything* imports it, not only if `AppModule` names it.
+
+## D-045: The counter can browse and search customers, not just look one up exactly
+
+- **Problem:** `/pos/lookup` only accepted an exact phone number via `findUnique` on the
+  `(organizationId, phone)` compound key. A cashier who mistyped a digit, or a customer
+  who couldn't recall their registered number, produced a dead end with no path forward
+  except retyping — costly during rush hour when speed matters most.
+- **Decision:** added `GET /pos/customers` (directory: recent customers with no query,
+  name/phone substring match with one) and `GET /pos/customers/:id` (opens the full
+  profile for a customer picked from that list), both gated by the same
+  `use_pos` + `view_customers` pair as the existing lookup. `GET /pos/lookup` is
+  untouched — it still e2e-tests the exact-phone path and remains valid for barcode/
+  loyalty-card scanners that emit a full number.
+- **`fullProfile()` is now the one place** that shapes a customer + active measurements +
+  recent orders + tier for the counter. `lookupByPhone`, `lookupById`, and the directory
+  all go through it (the directory returns a lighter row shape — id/name/phone/tier only
+  — since a picker list doesn't need five orders and a measurement matrix per row).
+  Before this, `lookupByPhone` was the only place that shape existed; duplicating it for
+  the new paths would have reintroduced the exact failure mode D-044 fixed for
+  measurements — three call sites free to quietly diverge.
+- **No query still returns something**: the eight most recently-updated customers, so the
+  counter is never a blank box waiting for input. Recency is a proxy for "who's likely
+  walking back in," not a claim about loyalty or spend.

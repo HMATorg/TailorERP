@@ -109,6 +109,76 @@ describe('POS checkout (e2e)', () => {
     expect(res.body.customer).toBeUndefined();
   });
 
+  it('opens a customer picked from the directory by id', async () => {
+    const res = await request(app.getHttpServer())
+      .get(`/api/v1/pos/customers/${customerId}`)
+      .set(auth())
+      .expect(200);
+
+    expect(res.body.found).toBe(true);
+    expect(res.body.customer.id).toBe(customerId);
+    expect(res.body.customer.tier).toBeDefined();
+    // Same shape as the phone-lookup path — the directory must never show a
+    // thinner profile than typing the number in would have.
+    expect(res.body.activeMeasurements.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('404s rather than leaking on an id outside the organisation', async () => {
+    await request(app.getHttpServer())
+      .get('/api/v1/pos/customers/00000000-0000-4000-8000-000000000000')
+      .set(auth())
+      .expect(404);
+  });
+
+  it('directory with no query returns recently-active customers', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/api/v1/pos/customers')
+      .set(auth())
+      .expect(200);
+
+    expect(Array.isArray(res.body)).toBe(true);
+    expect(res.body.length).toBeGreaterThan(0);
+    expect(res.body[0]).toEqual(
+      expect.objectContaining({ id: expect.any(String), fullName: expect.any(String), tier: expect.any(String) }),
+    );
+  });
+
+  it('directory search filters by phone digits', async () => {
+    const customer = await prisma.customer.findUniqueOrThrow({ where: { id: customerId } });
+    // A cashier types digits from the phone, not necessarily the full number.
+    const digits = customer.phone.slice(-6);
+
+    const res = await request(app.getHttpServer())
+      .get('/api/v1/pos/customers')
+      .set(auth())
+      .query({ search: digits })
+      .expect(200);
+
+    expect(res.body.some((c: { id: string }) => c.id === customerId)).toBe(true);
+  });
+
+  it('directory search filters by name substring', async () => {
+    const customer = await prisma.customer.findUniqueOrThrow({ where: { id: customerId } });
+    const fragment = customer.fullName.slice(0, 4);
+
+    const res = await request(app.getHttpServer())
+      .get('/api/v1/pos/customers')
+      .set(auth())
+      .query({ search: fragment })
+      .expect(200);
+
+    expect(res.body.some((c: { id: string }) => c.id === customerId)).toBe(true);
+  });
+
+  it('directory search finds nothing for a nonsense query without erroring', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/api/v1/pos/customers')
+      .set(auth())
+      .query({ search: 'zzzzznonexistentzzzzz' })
+      .expect(200);
+    expect(res.body).toEqual([]);
+  });
+
   it('previews the yield from the active profile', async () => {
     const res = await request(app.getHttpServer())
       .get(`/api/v1/pos/customers/${customerId}/yield`)

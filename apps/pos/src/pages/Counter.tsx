@@ -1,18 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
+import { CloseOutlined, DeleteOutlined, PlusOutlined, ShoppingCartOutlined } from '@ant-design/icons';
 import {
-  DeleteOutlined,
-  PlusOutlined,
-  SearchOutlined,
-  ShoppingCartOutlined,
-} from '@ant-design/icons';
-import {
-  Alert,
   Button,
   Card,
   Col,
   Divider,
   Empty,
-  Input,
   InputNumber,
   Row,
   Segmented,
@@ -36,6 +29,7 @@ import {
   errMsg,
   type MeasurementKey,
 } from '../api';
+import CustomerPicker from '../components/CustomerPicker';
 import MeasurementDiagram from '../components/MeasurementDiagram';
 
 interface Roll {
@@ -75,7 +69,6 @@ const newGarment = (n: number): Garment => ({
 
 export default function Counter() {
   const navigate = useNavigate();
-  const [phone, setPhone] = useState('+966');
   const [lookup, setLookup] = useState<Record<string, any> | null>(null);
   const [searching, setSearching] = useState(false);
 
@@ -94,32 +87,46 @@ export default function Counter() {
     (m: Record<string, unknown>) => m.garmentType === 'Thobe',
   );
 
-  const search = async () => {
+  /** Opens the full profile for a customer picked from the search list. */
+  const openCustomer = async (customerId: string) => {
     setSearching(true);
-    setLookup(null);
     try {
-      const { data } = await api.get('/pos/lookup', { params: { phone } });
-      setLookup(data);
-      if (data.found) {
-        const active = data.activeMeasurements?.find(
-          (m: Record<string, unknown>) => m.garmentType === 'Thobe',
-        );
-        if (active) {
-          const next: Partial<Record<MeasurementKey, number | null>> = {};
-          for (const p of MEASUREMENT_POINTS) {
-            const v = active[p.key];
-            next[p.key] = v == null ? null : Number(v);
-          }
-          setMeasurements(next);
-        } else {
-          setMeasurements({});
-        }
-      }
+      await loadProfile(customerId);
+      // A fresh customer starts a fresh order — a half-filled garment left over
+      // from whoever was at the counter a moment ago must not follow them in.
+      setGarments([newGarment(1)]);
+      setActiveTab('0');
+      setDeposit(0);
     } catch (e) {
       message.error(errMsg(e));
     } finally {
       setSearching(false);
     }
+  };
+
+  /** Fetches and applies a customer's profile without touching the in-progress order. */
+  const loadProfile = async (customerId: string) => {
+    const { data } = await api.get(`/pos/customers/${customerId}`);
+    setLookup(data);
+    const active = data.activeMeasurements?.find(
+      (m: Record<string, unknown>) => m.garmentType === 'Thobe',
+    );
+    const next: Partial<Record<MeasurementKey, number | null>> = {};
+    if (active) {
+      for (const p of MEASUREMENT_POINTS) {
+        const v = active[p.key];
+        next[p.key] = v == null ? null : Number(v);
+      }
+    }
+    setMeasurements(next);
+  };
+
+  const changeCustomer = () => {
+    setLookup(null);
+    setMeasurements({});
+    setGarments([newGarment(1)]);
+    setActiveTab('0');
+    setDeposit(0);
   };
 
   const saveMeasurements = async () => {
@@ -131,7 +138,7 @@ export default function Counter() {
         ...measurements,
       });
       message.success(`Measurement profile v${data.version} saved`);
-      await search();
+      await loadProfile(customer.id);
     } catch (e) {
       message.error(errMsg(e));
     } finally {
@@ -198,46 +205,35 @@ export default function Counter() {
 
   return (
     <div style={{ padding: 16, maxWidth: 1400, margin: '0 auto' }}>
-      {/* Phase 1: profile initialisation by phone */}
-      <Card size="small" style={{ marginBlockEnd: 16 }}>
-        <Space.Compact style={{ width: '100%', maxWidth: 560 }}>
-          <Input
-            size="large"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            onPressEnter={search}
-            placeholder="+9665xxxxxxxx"
-            inputMode="tel"
-            style={{ fontSize: 20 }}
-          />
-          <Button size="large" type="primary" icon={<SearchOutlined />} onClick={search} loading={searching}>
-            Find
-          </Button>
-        </Space.Compact>
-
-        {lookup && !lookup.found && (
-          <Alert
-            type="warning"
-            showIcon
-            style={{ marginBlockStart: 12 }}
-            message={`No customer with ${lookup.phone}`}
-            description="Create the customer in the admin app, then search again."
-          />
-        )}
-
-        {customer && (
-          <Space size="large" style={{ marginBlockStart: 12 }} wrap>
-            <Typography.Title level={4} style={{ margin: 0 }}>
-              {customer.fullName}
-            </Typography.Title>
-            <Tag color="gold">{String(customer.tier).toUpperCase()}</Tag>
-            <Typography.Text type="secondary">
-              {customer.lifetimeOrderCount} garments to date
-            </Typography.Text>
-            {customer.whatsappConsent && <Tag color="green">WhatsApp opted in</Tag>}
+      {/* Phase 1: find or open a customer */}
+      {!customer ? (
+        <Card size="small" style={{ marginBlockEnd: 16, maxWidth: 640 }}>
+          {searching ? (
+            <Spin style={{ display: 'block', margin: '24px 0' }} />
+          ) : (
+            <CustomerPicker onSelect={openCustomer} />
+          )}
+        </Card>
+      ) : (
+        <Card size="small" style={{ marginBlockEnd: 16 }}>
+          <Space size="large" wrap style={{ width: '100%', justifyContent: 'space-between' }}>
+            <Space size="large" wrap>
+              <Typography.Title level={4} style={{ margin: 0 }}>
+                {customer.fullName}
+              </Typography.Title>
+              <Typography.Text type="secondary">{customer.phone}</Typography.Text>
+              <Tag color="gold">{String(customer.tier).toUpperCase()}</Tag>
+              <Typography.Text type="secondary">
+                {customer.lifetimeOrderCount} garments to date
+              </Typography.Text>
+              {customer.whatsappConsent && <Tag color="green">WhatsApp opted in</Tag>}
+            </Space>
+            <Button icon={<CloseOutlined />} onClick={changeCustomer}>
+              Change customer
+            </Button>
           </Space>
-        )}
-      </Card>
+        </Card>
+      )}
 
       {customer && (
         <Row gutter={16}>
@@ -466,8 +462,6 @@ export default function Counter() {
           </Col>
         </Row>
       )}
-
-      {searching && !lookup && <Spin style={{ display: 'block', marginBlockStart: 40 }} />}
     </div>
   );
 }
