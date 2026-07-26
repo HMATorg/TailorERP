@@ -7,6 +7,7 @@ import {
 import { Prisma } from '@prisma/client';
 import { canTransition, type OrderStatus } from '@tailonix/shared';
 import { AuditService } from '../audit/audit.service';
+import { CounterService } from '../common/counter.service';
 import { FifoService } from '../inventory/fifo.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { OrderEventsPublisher } from './order-events.publisher';
@@ -23,13 +24,18 @@ export class OrdersService {
     private readonly prisma: PrismaService,
     private readonly fifo: FifoService,
     private readonly audit: AuditService,
+    private readonly counters: CounterService,
     private readonly events: OrderEventsPublisher,
   ) {}
 
   /** Sequential per-store order number, e.g. ORD-000042 (D-010). */
-  private async nextOrderNumber(tx: Prisma.TransactionClient, storeId: string): Promise<string> {
-    const count = await tx.order.count({ where: { storeId } });
-    return `ORD-${String(count + 1).padStart(6, '0')}`;
+  private async nextOrderNumber(
+    tx: Prisma.TransactionClient,
+    organizationId: string,
+    storeId: string,
+  ): Promise<string> {
+    const seq = await this.counters.next(tx, { organizationId, storeId, kind: 'order' });
+    return `ORD-${String(seq).padStart(6, '0')}`;
   }
 
   /** Explicit batch allocation path (wireframes §3.3): lock, validate, consume. */
@@ -104,7 +110,7 @@ export class OrdersService {
     if (!customer) throw new BadRequestException('Customer not found in your organization');
 
     const order = await this.prisma.$transaction(async (tx) => {
-      const orderNumber = await this.nextOrderNumber(tx, storeId);
+      const orderNumber = await this.nextOrderNumber(tx, orgId, storeId);
       const totalAmount = dto.items.reduce(
         (sum, i) => sum.add(new Prisma.Decimal(i.unitPrice).mul(i.quantity ?? 1)),
         new Prisma.Decimal(0),

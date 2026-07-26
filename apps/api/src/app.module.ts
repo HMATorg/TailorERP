@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { validateEnv } from './config/env.validation';
 import { AppointmentsModule } from './appointments/appointments.module';
 import { AuditModule } from './audit/audit.module';
+import { CommonModule } from './common/common.module';
 import { AuthModule } from './auth/auth.module';
 import { LedgerModule } from './ledger/ledger.module';
 import { PosModule } from './pos/pos.module';
@@ -32,6 +33,7 @@ import { TeamModule } from './team/team.module';
     }),
     PrismaModule,
     RedisModule,
+    CommonModule,
     AuditModule,
     StorageModule,
     AuthModule,

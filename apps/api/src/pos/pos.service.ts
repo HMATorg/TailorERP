@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { AuditService } from '../audit/audit.service';
+import { CounterService } from '../common/counter.service';
 import { ReservationService } from '../inventory/reservation.service';
 import { YieldService } from '../inventory/yield.service';
 import { InvoicesService } from '../invoices/invoices.service';
@@ -35,6 +36,7 @@ export class PosService {
     private readonly invoices: InvoicesService,
     private readonly zatca: ZatcaService,
     private readonly ledger: LedgerService,
+    private readonly counters: CounterService,
     private readonly audit: AuditService,
   ) {}
 
@@ -152,8 +154,13 @@ export class PosService {
     }
 
     const order = await this.prisma.$transaction(async (tx) => {
-      const count = await tx.order.count({ where: { storeId } });
-      const orderNumber = `ORD-${String(count + 1).padStart(6, '0')}`;
+      // Atomic — count(*)+1 collides when two tills check out together (D-038)
+      const seq = await this.counters.next(tx, {
+        organizationId: orgId,
+        storeId,
+        kind: 'order',
+      });
+      const orderNumber = `ORD-${String(seq).padStart(6, '0')}`;
 
       const total = prepared.reduce(
         (sum, p) => sum.add(new Prisma.Decimal(p.item.unitPrice).mul(p.item.quantity ?? 1)),
@@ -253,11 +260,15 @@ export class PosService {
     const tickets = await this.workshop.createTicketsForOrder(order.id, userId);
 
     let invoice = null;
+    let invoiceError: string | null = null;
     try {
       const created = await this.invoices.createForOrder(order.id, userId);
       invoice = await this.zatca.issue(created.id, userId);
     } catch (err) {
-      this.logger.error(`ZATCA issuance failed for ${order.orderNumber}: ${(err as Error).message}`);
+      // A missing tax invoice is a compliance problem, not a log line — the
+      // counter must know before handing goods over.
+      invoiceError = (err as Error).message || 'ZATCA issuance failed';
+      this.logger.error(`ZATCA issuance failed for ${order.orderNumber}: ${invoiceError}`);
     }
 
     await this.audit.log({
@@ -288,6 +299,7 @@ export class PosService {
       balanceDue: order.totalAmount.minus(order.paidAmount).toFixed(2),
       totalReservedMeters: totalReserved.toFixed(2),
       tickets: tickets.map((t) => ({ id: t.id, ticketCode: t.ticketCode, station: t.station })),
+      invoiceError,
       invoice: invoice && {
         id: invoice.id,
         invoiceNumber: invoice.invoiceNumber,

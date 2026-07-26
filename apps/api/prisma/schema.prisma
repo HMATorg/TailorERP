@@ -930,6 +930,27 @@ model LedgerLine {
   @@map("ledger_lines")
 }
 
+
+/// Atomic document numbering (D-038). `count(*) + 1` races under concurrent
+/// checkouts: every transaction reads the same count and writes the same
+/// number, so all but one hit the unique constraint and 500. A counter row
+/// incremented with UPDATE … RETURNING serialises on its own row lock.
+model DocumentCounter {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  /// null for org-wide sequences such as invoice numbers
+  storeId        String?  @map("store_id") @db.Uuid
+  /// 'order' | 'invoice' | 'ticket'
+  kind           String   @db.VarChar(30)
+  /// Scopes the sequence, e.g. the year for invoice numbering
+  scope          String   @default("") @db.VarChar(30)
+  value          Int      @default(0)
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@unique([organizationId, storeId, kind, scope])
+  @@map("document_counters")
+}
+
 // ─────────────────────────── WhatsApp ────────────────────────────────
 
 model WhatsappTemplate {

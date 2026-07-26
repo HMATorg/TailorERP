@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { AuditService } from '../audit/audit.service';
+import { CounterService } from '../common/counter.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
 import { InvoicePdfService } from './invoice-pdf.service';
@@ -18,6 +19,7 @@ export class InvoicesService {
     private readonly prisma: PrismaService,
     private readonly pdf: InvoicePdfService,
     private readonly storage: StorageService,
+    private readonly counters: CounterService,
     private readonly audit: AuditService,
   ) {}
 
@@ -27,10 +29,12 @@ export class InvoicesService {
     organizationId: string,
   ): Promise<string> {
     const year = new Date().getFullYear();
-    const count = await tx.invoice.count({
-      where: { organizationId, invoiceNumber: { startsWith: `INV-${year}-` } },
+    const seq = await this.counters.next(tx, {
+      organizationId,
+      kind: 'invoice',
+      scope: String(year), // numbering restarts each year
     });
-    return `INV-${year}-${String(count + 1).padStart(6, '0')}`;
+    return `INV-${year}-${String(seq).padStart(6, '0')}`;
   }
 
   /**

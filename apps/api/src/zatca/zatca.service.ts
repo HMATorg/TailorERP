@@ -38,12 +38,24 @@ export class ZatcaService {
     tx: Prisma.TransactionClient,
     organizationId: string,
   ): Promise<{ icv: number; previousHash: string }> {
+    // `SELECT … ORDER BY icv DESC LIMIT 1 FOR UPDATE` is NOT sufficient: it locks
+    // the latest *existing* row, which does nothing to stop two transactions
+    // from computing the same next ICV and both inserting. Concurrency testing
+    // showed exactly that — half of 14 parallel orders failed to get a tax
+    // invoice (D-039).
+    //
+    // A hash chain is inherently serial (invoice N embeds N-1's hash), so
+    // issuance must serialise per tenant. An advisory lock held for the
+    // transaction does that without blocking other organisations.
+    await tx.$executeRaw`
+      SELECT pg_advisory_xact_lock(hashtext(${`zatca:${organizationId}`}))
+    `;
+
     const rows = await tx.$queryRaw<{ icv: number | null; invoice_hash: string | null }[]>`
       SELECT icv, invoice_hash FROM invoices
       WHERE organization_id = ${organizationId}::uuid AND icv IS NOT NULL
       ORDER BY icv DESC
       LIMIT 1
-      FOR UPDATE
     `;
     const last = rows[0];
     return {

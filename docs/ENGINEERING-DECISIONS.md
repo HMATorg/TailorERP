@@ -414,6 +414,42 @@ as filed when it was not.
 - Verified live: deposit 26.09 + settlement 26.08 = 52.17, trial balance balanced,
   Unearned Revenue discharged to zero.
 
+## D-038: Document numbers need an atomic counter, not `count(*) + 1`
+
+- **Found by concurrency testing.** Firing 12 simultaneous checkouts at one store
+  produced **1 success and 11 HTTP 500s**: every transaction read the same
+  `count(*)`, built the same `ORD-…` number, and all but one hit the unique
+  constraint. Two tills in one shop would have done this daily.
+- The constraint did its job — no duplicate numbers reached the database — but the
+  clerk saw an opaque 500 instead of an order.
+- **Decision:** a `document_counters` row incremented by
+  `INSERT … ON CONFLICT DO UPDATE SET value = value + 1 RETURNING value`. One atomic
+  statement; the row lock serialises callers so each gets a distinct number.
+  Applied to order numbers (per store) and invoice numbers (per org, scoped by year).
+- The migration backfills counters from existing rows so numbering continues rather
+  than restarting at 1.
+- After: 12 concurrent → 6 accepted, 6 cleanly rejected 422, **zero errors**.
+
+## D-039: `FOR UPDATE` on the latest row does not serialise inserts
+
+- **Second bug from the same test, and a compliance failure.** Under 32-way load,
+  only **7 of 14** orders received a ZATCA tax invoice; the rest failed on
+  `unique (organization_id, icv)` and were swallowed by a catch.
+- `SELECT … ORDER BY icv DESC LIMIT 1 FOR UPDATE` locks the newest *existing* row.
+  It does nothing to stop two transactions reading that same row and computing the
+  same next ICV. Row locks guard rows, not the gap after them.
+- **Decision:** `pg_advisory_xact_lock` keyed on the organisation around ZATCA
+  issuance. A hash chain is inherently serial — invoice N embeds N−1's hash — so
+  issuance *must* serialise per tenant. An advisory lock does that without blocking
+  other tenants, and releases with the transaction.
+- **Also fixed:** a failed issuance now returns `invoiceError` on the checkout
+  response instead of only reaching the log. Handing over goods without a tax
+  invoice is a legal problem; the counter has to know.
+- After: 32 concurrent → 14 accepted, **14/14 with a tax invoice**, chain intact,
+  no ICV gaps.
+- Harness kept at `apps/api/test/concurrency-harness.js`; run it against a live API
+  after any change to reservation, numbering, or issuance.
+
 ## D-014: Validation library
 
 - **Decision:** `class-validator` + `class-transformer` DTOs (canonical NestJS style) rather
