@@ -11,14 +11,14 @@ export class PosController {
 
   /** Phase 1: the clerk types a phone number. */
   @Get('lookup')
-  @RequirePermissions('view_customers')
+  @RequirePermissions('use_pos', 'view_customers')
   lookup(@CurrentUser() principal: AccessTokenPayload, @Query('phone') phone: string) {
     return this.pos.lookupByPhone(principal.orgId!, phone);
   }
 
   /** Phase 2: fabric metres this garment will need, before committing stock. */
   @Get('customers/:customerId/yield')
-  @RequirePermissions('view_inventory')
+  @RequirePermissions('use_pos')
   previewYield(
     @Param('customerId', ParseUUIDPipe) customerId: string,
     @Query('garmentType') garmentType: string,
@@ -29,7 +29,7 @@ export class PosController {
 
   /** Phases 1–4 in one counter transaction. */
   @Post('orders')
-  @RequirePermissions('create_orders')
+  @RequirePermissions('pos_checkout')
   checkout(
     @CurrentUser() principal: AccessTokenPayload,
     @CurrentStoreId() storeId: string,
@@ -41,7 +41,7 @@ export class PosController {
 
   /** Phase 5 §3: balance paid at handover. */
   @Post('orders/:id/settle')
-  @RequirePermissions('process_payments')
+  @RequirePermissions('pos_settle')
   settle(
     @CurrentUser() principal: AccessTokenPayload,
     @CurrentStoreId() storeId: string,

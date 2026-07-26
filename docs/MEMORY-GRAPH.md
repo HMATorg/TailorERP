@@ -6,7 +6,7 @@
 > the repo — why something is blocked, what a trap looks like — belongs in the
 > auto-memory directory, not here.
 
-**Parent** `252b394` on `main` · **generated** 2026-07-26 16:16Z · staged into the commit being created on top of it
+**Parent** `fff88f3` on `main` · **generated** 2026-07-26 17:02Z · staged into the commit being created on top of it
 
 _History below runs to the parent; the commit carrying this file is its child._
 
@@ -25,6 +25,8 @@ graph LR
   Billing --> Auth
   Billing --> Platform
   Customer --> Appointments
+  Customer --> Measurements
+  Customers --> Measurements
   Invoices --> Zatca
   Notifications --> Invoices
   Orders --> Inventory
@@ -35,6 +37,7 @@ graph LR
   Pos --> Workshop
   Team --> Notifications
   Workshop --> Inventory
+  Workshop --> Measurements
 ```
 
 ## Applications
@@ -42,14 +45,14 @@ graph LR
 | App | Package | Dev port | TS/TSX files | Direct deps |
 | --- | --- | --- | --- | --- |
 | `apps/admin` | `@tailonix/admin` | 5173 | 23 | 11 |
-| `apps/api` | `@tailonix/api` | 3000 | 119 | 21 |
+| `apps/api` | `@tailonix/api` | 3000 | 124 | 21 |
 | `apps/platform-admin` | `@tailonix/platform-admin` | 5175 | 8 | 8 |
 | `apps/pos` | `@tailonix/pos` | 5176 | 8 | 12 |
-| `apps/pwa` | `@tailonix/pwa` | 5174 | 13 | 9 |
+| `apps/pwa` | `@tailonix/pwa` | 5174 | 14 | 9 |
 
 ## API modules
 
-23 feature modules, all wired into `AppModule`.
+24 feature modules, all wired into `AppModule`.
 
 | Module | Path | Depends on |
 | --- | --- | --- |
@@ -58,13 +61,14 @@ graph LR
 | `AuthModule` | `apps/api/src/auth/auth.module.ts` | — |
 | `BillingModule` | `apps/api/src/billing/billing.module.ts` | `AuthModule`, `PlatformModule` |
 | `CommonModule` | `apps/api/src/common/common.module.ts` | — |
-| `CustomerModule` | `apps/api/src/customer-api/customer.module.ts` | `AppointmentsModule` |
-| `CustomersModule` | `apps/api/src/customers/customers.module.ts` | — |
+| `CustomerModule` | `apps/api/src/customer-api/customer.module.ts` | `AppointmentsModule`, `MeasurementsModule` |
+| `CustomersModule` | `apps/api/src/customers/customers.module.ts` | `MeasurementsModule` |
 | `DashboardModule` | `apps/api/src/dashboard/dashboard.module.ts` | — |
 | `HealthModule` | `apps/api/src/health/health.module.ts` | — |
 | `InventoryModule` | `apps/api/src/inventory/inventory.module.ts` | — |
 | `InvoicesModule` | `apps/api/src/invoices/invoices.module.ts` | `ZatcaModule` |
 | `LedgerModule` | `apps/api/src/ledger/ledger.module.ts` | — |
+| `MeasurementsModule` | `apps/api/src/measurements/measurements.module.ts` | — |
 | `NotificationsModule` | `apps/api/src/notifications/notifications.module.ts` | `InvoicesModule` |
 | `OrdersModule` | `apps/api/src/orders/orders.module.ts` | `InventoryModule`, `NotificationsModule` |
 | `PlatformModule` | `apps/api/src/platform/platform.module.ts` | `AuthModule` |
@@ -74,7 +78,7 @@ graph LR
 | `StorageModule` | `apps/api/src/storage/storage.module.ts` | — |
 | `StoresModule` | `apps/api/src/stores/stores.module.ts` | — |
 | `TeamModule` | `apps/api/src/team/team.module.ts` | `NotificationsModule` |
-| `WorkshopModule` | `apps/api/src/workshop/workshop.module.ts` | `InventoryModule` |
+| `WorkshopModule` | `apps/api/src/workshop/workshop.module.ts` | `InventoryModule`, `MeasurementsModule` |
 | `ZatcaModule` | `apps/api/src/zatca/zatca.module.ts` | — |
 
 ## Data model
@@ -101,7 +105,7 @@ graph LR
 
 ## Engineering decisions
 
-41 recorded in `docs/ENGINEERING-DECISIONS.md`. "Cited by" counts source
+44 recorded in `docs/ENGINEERING-DECISIONS.md`. "Cited by" counts source
 files that reference the decision in a comment — an uncited decision is not wrong,
 but it is the first place to look when something has quietly been undone.
 
@@ -147,13 +151,16 @@ but it is the first place to look when something has quietly been undone.
 | `D-038` | Document numbers need an atomic counter, not `count(*) + 1` | 3 file(s) |
 | `D-039` | `FOR UPDATE` on the latest row does not serialise inserts | 1 file(s) |
 | `D-040` | Arabic invoices need a font, not a shaping engine | 2 file(s) |
-| `D-041` | Creating an invoice issues it; the PDF is rendered after | — |
+| `D-041` | Creating an invoice issues it; the PDF is rendered after | 1 file(s) |
+| `D-042` | The invoice footer anchors to the page box, not a constant | 1 file(s) |
+| `D-043` | POS and the workshop get their own permissions | 2 file(s) |
+| `D-044` | One read model for measurements, and it is read-only | 1 file(s) |
 
 ## Tests
 
 | Suite | Files | Declared cases |
 | --- | --- | --- |
-| unit | 10 | 111 |
+| unit | 12 | 128 |
 | e2e | 0 | 0 |
 
 Counts are parsed from `it(` / `test(` call sites, so they include any case that is
@@ -163,6 +170,7 @@ currently skipped. They are a shape check, not a substitute for running the suit
 
 | Commit | Date | Subject |
 | --- | --- | --- |
+| `fff88f3` | 2026-07-26 | Drop the hook pre-filter that was missing real commits |
 | `252b394` | 2026-07-26 | Make the printed invoice a valid KSA tax invoice |
 | `b685805` | 2026-07-26 | @ Stop the graph hook from dirtying the index on unrelated commands |
 | `871ab64` | 2026-07-26 | @ Label the graph header honestly when it is generated pre-commit |

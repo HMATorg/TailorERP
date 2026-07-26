@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, NavLink, Outlet, Route, Routes } from 'react-r
 import { useAuth } from './api';
 import Appointments from './pages/Appointments';
 import Login from './pages/Login';
+import Measurements from './pages/Measurements';
 import Orders from './pages/Orders';
 import OrderTracking from './pages/OrderTracking';
 import Profile from './pages/Profile';
@@ -23,6 +24,10 @@ function Shell() {
           <span className="tab-icon">📅</span>
           {t('nav.appointments')}
         </NavLink>
+        <NavLink to="/measurements" className={({ isActive }) => (isActive ? 'active' : '')}>
+          <span className="tab-icon">📏</span>
+          {t('nav.measurements')}
+        </NavLink>
         <NavLink to="/profile" className={({ isActive }) => (isActive ? 'active' : '')}>
           <span className="tab-icon">👤</span>
           {t('nav.profile')}
@@ -41,6 +46,7 @@ export default function App() {
           <Route path="/" element={<Orders />} />
           <Route path="/orders/:id" element={<OrderTracking />} />
           <Route path="/appointments" element={<Appointments />} />
+          <Route path="/measurements" element={<Measurements />} />
           <Route path="/profile" element={<Profile />} />
         </Route>
       </Routes>

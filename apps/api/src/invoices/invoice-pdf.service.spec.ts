@@ -70,6 +70,32 @@ describe('InvoicePdfService', () => {
     expect(pages).toBe(1);
   });
 
+  it('stays on one page with the fullest realistic totals block', async () => {
+    // Two garments, a discount and a part payment is what a real counter sale
+    // looks like, and it produces every totals row at once: subtotal, discount,
+    // net, VAT, gross, paid, balance. That combination is what pushed the QR
+    // caption onto a second page.
+    const { pages, text } = await readPdf(
+      await service.generate({
+        ...baseData,
+        lines: [
+          { garmentType: 'ثوب سعودي', description: 'قطن أبيض', quantity: 2, unitPrice: '250.00' },
+          { garmentType: 'بشت مطرز', description: 'صوف أسود', quantity: 1, unitPrice: '900.00' },
+        ],
+        subtotal: '1400.00',
+        discount: '50.00',
+        total: '1350.00',
+        netAmount: '1173.91',
+        vatAmount: '176.09',
+        paid: '500.00',
+      }),
+    );
+    expect(pages).toBe(1);
+    expect(text).toContain('Balance due');
+    expect(text).toContain('850.00'); // 1350 − 500
+    expect(text).toContain('Scan to verify');
+  });
+
   it('renders Arabic as real, extractable characters rather than boxes', async () => {
     const { text } = await readPdf(await service.generate(baseData));
     // Assertions are per word, not per phrase: pdf.js reconstructs RTL runs in

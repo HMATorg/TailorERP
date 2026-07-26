@@ -509,3 +509,65 @@ as filed when it was not.
   `splitInclusive` when the stored tax block is zero, rather than printing "VAT 0.00"
   on a document whose total plainly includes VAT. An unissued invoice prints
   "QR not yet issued" instead of silently omitting the QR.
+
+## D-042: The invoice footer anchors to the page box, not a constant
+
+- **Bug this fixes:** the QR block sat at a hand-tuned `y`. Once the totals grew — a
+  discount row and a balance-due row are enough, i.e. an ordinary counter sale with a
+  deposit — the QR caption crossed the bottom margin and PDFKit spilled it onto a
+  second, otherwise blank page. Every such invoice printed as two sheets.
+- **Decision:** derive the footer band from the page: A4 is 841.89pt, the margin is 50,
+  so content ends at 791.89 and the footer occupies the last 124pt of that. Each block
+  guards its own boundary — line items stop before the band, the totals block starts a
+  page when its worst case (7 rows) would not fit, and the footer starts one only when
+  the totals genuinely reach into it.
+- **Every footer `text()` passes `lineBreak: false`.** Without it PDFKit may paginate on
+  its own account and reintroduce the blank page from a different direction.
+- **Regression test** uses the realistic worst case rather than the minimal one: two
+  garments, a discount and a part payment, which is the combination that produces every
+  totals row at once. `scripts/sample-invoice.ts` renders the same case for eyeballing.
+
+## D-043: POS and the workshop get their own permissions
+
+- **Problem:** the counter and the workshop floor were authorised with back-office
+  permissions — `create_orders` for checkout, `process_payments` for settlement,
+  `manage_orders` and `update_order_status` for moving tickets. That conflates three
+  different rooms: you could not hand someone the till without also handing them order
+  administration, nor let the workshop tablet move tickets without granting the counter.
+- **Decision:** add `use_pos`, `pos_checkout`, `pos_settle`, `view_workshop`,
+  `manage_workshop`, plus `view_measurement_history` split out from `view_measurements`.
+  Defaults: cashier gets the till and no workshop; tailor gets the workshop and
+  measurement history but no till; store manager gets both; regional manager gets
+  read-only oversight.
+- **Measurement history is separately permissioned** from the active set, because a
+  tailor re-cutting an old order needs superseded numbers while a cashier quoting a new
+  one does not.
+- **Effective permissions now travel with the login response**, computed server-side per
+  store (role defaults + the per-user JSONB grants/revokes, which a client cannot derive
+  from a role name alone). This is for hiding UI the user cannot use; `PermissionsGuard`
+  still enforces independently and remains the only thing that decides.
+- **The count assertion in `permissions.spec.ts` now counts `PERMISSIONS`** rather than
+  the literal 17. It exists to catch a role losing coverage, not to freeze the enum size.
+
+## D-044: One read model for measurements, and it is read-only
+
+- **Problem:** the M1–M8 matrix is displayed on four surfaces — the customer's PWA, the
+  counter, the admin SPA, and the workshop tablet — and each was free to hand-roll its
+  own `select`. The customer PWA had one; staff had no read endpoint at all, only a
+  create route. Three hand-maintained field lists are three chances for one surface to
+  show a different figure than the person holding the scissors.
+- **Decision:** `MeasurementsService` owns a single `MEASUREMENT_SELECT` and the grouped
+  history shape, and every surface reads through it. Writes stay in `CustomersService`,
+  which owns versioning and supersession, so no display path can edit what a garment was
+  cut against.
+- **Customers get read-only access to every version**, not just the active one. There is
+  no corresponding write route, and the query is scoped by the customer id on the token.
+  History is shown rather than hidden because "why does this one fit differently" is
+  answered by it.
+- **The workshop reads the snapshot the garment was cut against** — the order item's
+  `measurementId` — not whatever is active now. Re-measuring a customer mid-production
+  must not silently change what is on the cutting table. When a newer version exists the
+  response flags `supersededByNewerVersion` instead of swapping to it.
+- `MeasurementsModule` is a shared provider module imported by the feature modules that
+  consume it, not by `AppModule`. The memory-graph drift check was widened accordingly:
+  a module is wired if *anything* imports it, not only if `AppModule` names it.

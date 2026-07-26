@@ -12,6 +12,7 @@ import {
 import { CurrentStoreId, CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequirePermissions } from '../auth/decorators/require-permissions.decorator';
 import type { AccessTokenPayload } from '../auth/auth.types';
+import { MeasurementsService } from '../measurements/measurements.service';
 import { CustomersService } from './customers.service';
 import {
   CreateCustomerDto,
@@ -21,7 +22,10 @@ import {
 
 @Controller('customers')
 export class CustomersController {
-  constructor(private readonly customers: CustomersService) {}
+  constructor(
+    private readonly customers: CustomersService,
+    private readonly measurements: MeasurementsService,
+  ) {}
 
   @Get()
   @RequirePermissions('view_customers')
@@ -65,6 +69,30 @@ export class CustomersController {
     @Ip() ip: string,
   ) {
     return this.customers.update(principal.orgId!, principal.sub, id, dto, ip);
+  }
+
+  /** The snapshots currently being cut against — one per garment type. */
+  @Get(':id/measurements')
+  @RequirePermissions('view_measurements')
+  activeMeasurements(
+    @CurrentUser() principal: AccessTokenPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.measurements.activeForStaff(principal.orgId!, id);
+  }
+
+  /**
+   * Every version ever taken, grouped by garment. Separately permissioned from
+   * the active set: a tailor re-cutting an old order needs the superseded
+   * numbers, a cashier quoting a new one does not.
+   */
+  @Get(':id/measurements/history')
+  @RequirePermissions('view_measurement_history')
+  measurementHistory(
+    @CurrentUser() principal: AccessTokenPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.measurements.historyForStaff(principal.orgId!, id);
   }
 
   @Post(':id/measurements')

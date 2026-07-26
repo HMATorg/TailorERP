@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { BarcodeOutlined, ReloadOutlined } from '@ant-design/icons';
 import {
+  Alert,
   Badge,
   Button,
   Card,
@@ -11,10 +12,12 @@ import {
   Modal,
   Row,
   Space,
+  Table,
   Tag,
   Typography,
   message,
 } from 'antd';
+import type { TicketMeasurements } from '@tailonix/shared';
 import { api, errMsg } from '../api';
 
 interface Ticket {
@@ -69,6 +72,10 @@ export default function Workshop() {
   const [columns, setColumns] = useState<Column[]>([]);
   const [loading, setLoading] = useState(false);
   const [scanned, setScanned] = useState<Record<string, any> | null>(null);
+  // Measurements come from their own endpoint so the floor sees the snapshot the
+  // garment was CUT AGAINST plus its history — not whatever is active now.
+  const [measure, setMeasure] = useState<TicketMeasurements | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
   const [code, setCode] = useState('');
   const scanRef = useRef<any>(null);
 
@@ -96,6 +103,12 @@ export default function Workshop() {
     if (!trimmed) return;
     try {
       const { data } = await api.get(`/workshop/tickets/by-code/${encodeURIComponent(trimmed)}`);
+      setShowHistory(false);
+      setMeasure(null);
+      api
+        .get(`/workshop/tickets/${data.id}/measurements`)
+        .then((r) => setMeasure(r.data))
+        .catch(() => setMeasure(null));
       setScanned(data);
     } catch (e) {
       message.error(errMsg(e));
@@ -207,7 +220,10 @@ export default function Workshop() {
       <Modal
         open={!!scanned}
         title={scanned ? `Ticket ${scanned.ticketCode}` : ''}
-        onCancel={() => setScanned(null)}
+        onCancel={() => {
+          setScanned(null);
+          setMeasure(null);
+        }}
         footer={null}
         width={720}
       >
@@ -228,22 +244,92 @@ export default function Workshop() {
               <Descriptions.Item label="Fabric needed">{scanned.orderItem.yieldMeters}m</Descriptions.Item>
             </Descriptions>
 
-            {scanned.orderItem.measurement && (
-              <Descriptions
-                title="Pattern measurements (cm)"
-                column={{ xs: 2, md: 4 }}
-                size="small"
-                style={{ marginBlockStart: 16 }}
-              >
-                <Descriptions.Item label="M1 الطول">{scanned.orderItem.measurement.m1TotalLength ?? '—'}</Descriptions.Item>
-                <Descriptions.Item label="M2 الكتف">{scanned.orderItem.measurement.m2ShoulderWidth ?? '—'}</Descriptions.Item>
-                <Descriptions.Item label="M3 الكم">{scanned.orderItem.measurement.m3SleeveLength ?? '—'}</Descriptions.Item>
-                <Descriptions.Item label="M4 الصدر">{scanned.orderItem.measurement.m4ChestCirc ?? '—'}</Descriptions.Item>
-                <Descriptions.Item label="M5 الوسط">{scanned.orderItem.measurement.m5HipWidth ?? '—'}</Descriptions.Item>
-                <Descriptions.Item label="M6 الرقبة">{scanned.orderItem.measurement.m6NeckDiameter ?? '—'}</Descriptions.Item>
-                <Descriptions.Item label="M7 الوسع">{scanned.orderItem.measurement.m7WristOpening ?? '—'}</Descriptions.Item>
-                <Descriptions.Item label="M8 الذيل">{scanned.orderItem.measurement.m8SkirtPerimeter ?? '—'}</Descriptions.Item>
-              </Descriptions>
+            {measure?.cutAgainst && (
+              <>
+                {measure.supersededByNewerVersion && (
+                  <Alert
+                    type="warning"
+                    showIcon
+                    style={{ marginBlockStart: 16 }}
+                    message="This customer has been re-measured since this ticket was cut"
+                    description={
+                      'Keep working to version ' +
+                      measure.cutAgainst.version +
+                      ' below — it is what the fabric was cut to. The newer version applies to future orders.'
+                    }
+                  />
+                )}
+                <Descriptions
+                  title={
+                    <Space>
+                      <span>Cutting to (cm)</span>
+                      <Tag color={measure.supersededByNewerVersion ? 'orange' : 'green'}>
+                        v{measure.cutAgainst.version}
+                      </Tag>
+                    </Space>
+                  }
+                  column={{ xs: 2, md: 4 }}
+                  size="small"
+                  style={{ marginBlockStart: 16 }}
+                >
+                  {measure.points.map((p) => (
+                    <Descriptions.Item
+                      key={p.key}
+                      label={`${p.label} ${p.labelAr}`}
+                    >
+                      {measure.cutAgainst?.[p.key] ?? '—'}
+                    </Descriptions.Item>
+                  ))}
+                </Descriptions>
+
+                {measure.history.length > 1 && (
+                  <>
+                    <Button
+                      size="small"
+                      type="link"
+                      style={{ paddingInline: 0 }}
+                      onClick={() => setShowHistory((v) => !v)}
+                    >
+                      {showHistory
+                        ? 'Hide measurement history'
+                        : `Show measurement history (${measure.history.length} versions)`}
+                    </Button>
+                    {showHistory && (
+                      <Table
+                        size="small"
+                        pagination={false}
+                        rowKey="id"
+                        style={{ marginBlockStart: 8 }}
+                        dataSource={measure.history}
+                        columns={[
+                          {
+                            title: 'Ver',
+                            dataIndex: 'version',
+                            width: 76,
+                            render: (v: number, row: any) => (
+                              <Space size={4}>
+                                <span>v{v}</span>
+                                {row.isActive && <Tag color="green">current</Tag>}
+                                {measure.cutAgainst?.version === v && <Tag color="blue">cut</Tag>}
+                              </Space>
+                            ),
+                          },
+                          ...measure.points.map((p) => ({
+                            title: p.label,
+                            dataIndex: p.key,
+                            render: (v: string | null) => v ?? '—',
+                          })),
+                          {
+                            title: 'Taken',
+                            dataIndex: 'createdAt',
+                            render: (v: string) => new Date(v).toLocaleDateString(),
+                          },
+                        ]}
+                      />
+                    )}
+                  </>
+                )}
+              </>
             )}
 
             {NEXT[scanned.station] && (

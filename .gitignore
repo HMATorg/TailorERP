@@ -15,3 +15,7 @@ Thumbs.db
 .turbo/
 apps/api/prisma/*.db
 minio-data/
+
+# Generated invoice samples from apps/api/scripts/sample-invoice.ts
+*.sample-inv.pdf
+sample-invoice.pdf

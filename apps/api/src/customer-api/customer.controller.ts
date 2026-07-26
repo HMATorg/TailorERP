@@ -21,6 +21,7 @@ import {
 } from '../appointments/dto/appointments.dto';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { AccessTokenPayload } from '../auth/auth.types';
+import { MEASUREMENT_POINTS, MeasurementsService } from '../measurements/measurements.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CustomerGuard } from './customer.guard';
 
@@ -41,6 +42,7 @@ export class CustomerController {
     private readonly appointments: AppointmentsService,
     private readonly availability: AvailabilityService,
     private readonly config: ConfigService,
+    private readonly measurements: MeasurementsService,
   ) {}
 
   /** VAPID public key the PWA needs to create a push subscription. */
@@ -111,27 +113,22 @@ export class CustomerController {
     };
   }
 
+  /**
+   * The customer's own measurements — every version, grouped by garment, with
+   * the active one flagged. Read-only: there is no corresponding write route,
+   * because a customer must never be able to alter what a garment was cut
+   * against. Scoped to the customer id on the token, so it can only ever return
+   * their own record.
+   */
   @Get('measurements')
   myMeasurements(@CurrentUser() principal: AccessTokenPayload) {
-    return this.prisma.measurement.findMany({
-      where: { customerId: principal.sub },
-      orderBy: { createdAt: 'desc' },
-      select: {
-        id: true,
-        garmentType: true,
-        version: true,
-        m1TotalLength: true,
-        m2ShoulderWidth: true,
-        m3SleeveLength: true,
-        m4ChestCirc: true,
-        m5HipWidth: true,
-        m6NeckDiameter: true,
-        m7WristOpening: true,
-        m8SkirtPerimeter: true,
-        createdAt: true,
-        store: { select: { id: true, name: true } },
-      },
-    });
+    return this.measurements.myHistory(principal.sub);
+  }
+
+  /** Field labels (en/ar) so the PWA can render the diagram without hardcoding. */
+  @Get('measurements/points')
+  measurementPoints() {
+    return MEASUREMENT_POINTS;
   }
 
   @Get('stores')

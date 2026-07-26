@@ -47,9 +47,14 @@ const LIGHT = '#9E9E9E';
 const CHARCOAL = '#212121';
 const RULE = '#E0E0E0';
 
-// A4 content box
+// A4 content box. A4 is 841.89pt tall and the margin is 50, so content must end
+// by 791.89 — anything drawn past that is what PDFKit spills onto a new page.
 const LEFT = 50;
 const RIGHT = 545;
+const PAGE_BOTTOM = 791.89;
+/** QR (96) + its caption + breathing room above. */
+const FOOTER_HEIGHT = 124;
+const FOOTER_TOP = PAGE_BOTTOM - FOOTER_HEIGHT;
 
 /**
  * KSA tax invoice (TRD §5.5, ZATCA Fatoora Phase 2).
@@ -87,9 +92,9 @@ export class InvoicePdfService implements OnModuleInit {
 
     this.header(doc, data);
     this.parties(doc, data);
-    const y = this.lineItems(doc, data);
-    this.totals(doc, data, money, y);
-    this.footer(doc, qr);
+    const afterItems = this.lineItems(doc, data);
+    const afterTotals = this.totals(doc, data, money, afterItems);
+    this.footer(doc, qr, afterTotals);
 
     doc.end();
     return done;
@@ -235,25 +240,33 @@ export class InvoicePdfService implements OnModuleInit {
       doc.text(amount, COL.amount.x, y, { width: COL.amount.w, align: 'right' });
 
       y += line.description ? 36 : 24;
-      if (y > 640) {
+      // Stop before the footer band; the totals block guards its own boundary.
+      if (y > FOOTER_TOP - 40) {
         doc.addPage();
-        registerInvoiceFonts(doc);
         y = 60;
       }
     }
     return y;
   }
 
+  /** Returns the y cursor after the last row, so the footer can place itself. */
   private totals(
     doc: PDFKit.PDFDocument,
     data: InvoiceData,
     money: (v: string) => string,
     startY: number,
-  ): void {
+  ): number {
     // Totals sit on the left, where an RTL line ends.
     const LABEL = { x: 170, w: 150 };
     const VALUE = { x: LEFT, w: 110 };
+    // Worst case is 7 rows: subtotal, discount, net, VAT, gross, paid, balance.
+    const BLOCK_HEIGHT = 190;
+
     let y = startY + 6;
+    if (y + BLOCK_HEIGHT > PAGE_BOTTOM) {
+      doc.addPage();
+      y = 60;
+    }
 
     doc.moveTo(LEFT, y).lineTo(330, y).strokeColor(RULE).stroke();
     y += 12;
@@ -301,20 +314,28 @@ export class InvoicePdfService implements OnModuleInit {
         .font(AR_BOLD)
         .fontSize(11)
         .fillColor('#2E7D32')
-        .text('مدفوعة بالكامل', LABEL.x, y, { width: LABEL.w, align: 'right' });
+        .text('مدفوعة بالكامل', LABEL.x, y, { width: LABEL.w, align: 'right', lineBreak: false });
       doc
         .font(AR)
         .fontSize(7)
         .fillColor(LIGHT)
-        .text('Paid in full', LABEL.x, y + 12, { width: LABEL.w, align: 'right' });
+        .text('Paid in full', LABEL.x, y + 12, { width: LABEL.w, align: 'right', lineBreak: false });
+      y += 26;
     }
+    return y;
   }
 
-  private footer(doc: PDFKit.PDFDocument, qr: Buffer | null): void {
-    // A4 is 841.89pt tall. The QR block is 96pt plus a 12pt caption, so it has
-    // to start high enough that the caption does not push onto a second page —
-    // which is exactly what happened when this began at 690.
-    const y = 660;
+  private footer(doc: PDFKit.PDFDocument, qr: Buffer | null, afterTotals: number): void {
+    // Anchor the footer to the page box rather than a hand-tuned constant. The
+    // trailing near-empty page came from a fixed y that happened to push the QR
+    // caption past the bottom margin once the totals block grew — a discount row
+    // and a balance-due row were enough. Only start a new page when the content
+    // above genuinely reaches into the footer band.
+    if (afterTotals > FOOTER_TOP) doc.addPage();
+    const y = FOOTER_TOP;
+
+    // Every call below is lineBreak:false so PDFKit can never paginate on its
+    // own account and reintroduce the blank page.
     if (qr) {
       doc.image(qr, RIGHT - 96, y, { width: 96 });
       doc
@@ -335,6 +356,7 @@ export class InvoicePdfService implements OnModuleInit {
         .text('لم يتم إصدار رمز الاستجابة السريعة · QR not yet issued', RIGHT - 220, y, {
           width: 220,
           align: 'right',
+          lineBreak: false,
         });
     }
 
@@ -342,11 +364,15 @@ export class InvoicePdfService implements OnModuleInit {
       .font(AR)
       .fontSize(9)
       .fillColor(GREY)
-      .text('شكرًا لتعاملكم معنا', LEFT, y + 60, { width: 240, align: 'left' });
+      .text('شكرًا لتعاملكم معنا', LEFT, y + 60, { width: 240, align: 'left', lineBreak: false });
     doc
       .font(AR)
       .fontSize(7)
       .fillColor(LIGHT)
-      .text('Thank you for your business.', LEFT, y + 74, { width: 240, align: 'left' });
+      .text('Thank you for your business.', LEFT, y + 74, {
+        width: 240,
+        align: 'left',
+        lineBreak: false,
+      });
   }
 }

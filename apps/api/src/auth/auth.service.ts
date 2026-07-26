@@ -4,6 +4,11 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
+import {
+  computeEffectivePermissions,
+  PERMISSIONS,
+  type PermissionOverrides,
+} from '@tailonix/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { TokenService } from './token.service';
 import type { AuthTokens } from './auth.types';
@@ -42,14 +47,30 @@ export class AuthService {
       ip,
     );
 
+    // Effective permissions per store travel with the login so a client can hide
+    // what the user cannot do, instead of rendering buttons that 403. Computed
+    // server-side because per-user JSONB grants/revokes are invisible to a client
+    // that only knows the role name. The API still enforces independently — this
+    // is for the UI, never a substitute for the guard.
     const stores =
       user.orgRole === 'hq_admin'
-        ? await this.prisma.store.findMany({
-            where: { organizationId: user.organizationId },
-            select: { id: true, name: true, status: true, isHeadquarters: true },
-            orderBy: [{ isHeadquarters: 'desc' }, { name: 'asc' }],
-          })
-        : user.storeRoles.map((r) => ({ ...r.store, role: r.role }));
+        ? (
+            await this.prisma.store.findMany({
+              where: { organizationId: user.organizationId },
+              select: { id: true, name: true, status: true, isHeadquarters: true },
+              orderBy: [{ isHeadquarters: 'desc' }, { name: 'asc' }],
+            })
+          ).map((s) => ({ ...s, role: 'hq_admin' as const, permissions: [...PERMISSIONS] }))
+        : user.storeRoles.map((r) => ({
+            ...r.store,
+            role: r.role,
+            permissions: [
+              ...computeEffectivePermissions(
+                r.role,
+                r.permissions as PermissionOverrides | null,
+              ),
+            ],
+          }));
 
     return {
       user: {

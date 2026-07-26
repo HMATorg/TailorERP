@@ -204,12 +204,16 @@ for (let i = 1; i < decisions.length; i++) {
   }
 }
 
-// 5. A feature module exists on disk but was never wired into AppModule, so it
-//    ships no routes. Silent in tests, invisible until someone calls the endpoint.
+// 5. A module exists on disk but nothing imports it, so it ships no routes and
+//    provides nothing. Silent in tests, invisible until someone calls the
+//    endpoint. Reachability is what matters, not being named in AppModule
+//    specifically: a shared provider module like MeasurementsModule is legitimately
+//    imported only by the feature modules that consume it.
+const importedAnywhere = new Set(modules.flatMap((m) => m.imports));
 for (const m of modules) {
   if (m.class === 'AppModule') continue;
-  if (!wired.has(m.class)) {
-    fail('unwired-module', `${m.class} (${m.file}) is not imported by AppModule`);
+  if (!wired.has(m.class) && !importedAnywhere.has(m.class)) {
+    fail('unwired-module', `${m.class} (${m.file}) is imported by no other module`);
   }
 }
 
