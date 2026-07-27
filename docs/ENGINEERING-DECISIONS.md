@@ -676,3 +676,49 @@ as filed when it was not.
 - **Caught by using a real seeded cashier account for the first time**, not by reasoning about
   the permission table in the abstract — the lesson generalises: a new role's defaults are not
   actually verified until something runs the entire workflow as that role, end to end.
+
+## D-049: The Print Center's first shipped version was never actually print-tested
+
+- **What the user found:** the A4 tax invoice button did nothing, and the two prints that did
+  work — the thermal receipt and the garment tag — both showed the app's own navigation bar
+  (Counter/Workshop toggle, store selector) bleeding across the top of the page, floating small
+  inside what was clearly a full default-size sheet rather than a receipt or a label, with a
+  second, entirely blank page tacked on after.
+- **Why the D-047 verification pass missed all three:** it inspected rendered DOM content and
+  CSS *selector* text, and confirmed a real click's popup opened once — none of that exercises
+  Chromium's actual print-to-PDF pipeline, so a page that would visibly break under `Ctrl+P`
+  looked correct from the outside.
+- **Three separate, concrete bugs, each independently confirmed by capturing real print output
+  with `page.pdf()` before and after** (see `apps/pos/scripts/verify-print-center.mjs`):
+  1. **The app shell was never scoped out of print.** `Layout.Header` lives in `App.tsx`'s
+     `Shell`, structurally outside anything `Receipt.tsx` controls — no `.screen-only`/
+     `.print-only` class ever touched it, so it printed on every job regardless of mode.
+     Fixed with a `no-print` class on the header, honoured by the same `@media print` block.
+  2. **`@page { size: 80mm auto }` is invalid CSS.** The `size` property accepts one or two
+     `<length>` values, `auto` alone, or a page-size keyword — not a length paired with `auto`.
+     A UA that rejects one token in the shorthand drops the whole declaration, which is exactly
+     what happened: content sized for an 80mm receipt was laid out onto the browser's default
+     paper size instead. Fixed to an explicit `80mm 297mm` (A4's height as a generous ceiling —
+     no real receipt should hit it, and a continuous-roll printer's own driver cuts to content
+     length regardless of this hint).
+  3. **`Layout` was styled `minHeight: '100vh'`, and Chrome recomputes `vh` per printed page.**
+     An ancestor pinned to "at least one viewport tall" forces the print job to be at least one
+     full page tall no matter how short the actual content is; anything appended after that —
+     even a few pixels of margin — spills onto a genuinely blank second page. Fixed with a print
+     rule collapsing `html, body, #root, .ant-layout` to `min-height: 0` — needs `!important`
+     because the 100vh is an inline style, which ordinary specificity cannot beat.
+- **The A4 button's actual fix: stopped using `window.open()` for the navigation, not just for
+  timing.** D-047 already fixed calling it after an `await` (losing the click's user-activation
+  window). That turned out to still be a `window.open()` popup, which some browsers' popup
+  blockers reject regardless of gesture freshness — plausibly what the user hit. Switched to a
+  synthetic click on a temporary `<a target="_blank" rel="noopener noreferrer">`, which is a
+  plain navigation, not a popup, and is the standard technique for exactly this reason.
+- **Verification method itself changed.** The MCP browser tool's synthetic clicks do not count
+  as a trusted user gesture in this harness at all — proven earlier by a bare
+  `<button onclick>{window.open()}</button>` returning `null` on a real dispatched click — so it
+  cannot validate anything gesture-gated, and inspecting rendered DOM/CSS text cannot validate
+  actual paginated print output. `apps/pos/scripts/verify-print-center.mjs` drives the real
+  counter flow with Playwright against a real, non-headless Chrome and calls `page.pdf()` —
+  the same pipeline a physical "Save as PDF" uses — kept in the repo specifically so the next
+  change to `print.css`/`print.ts`/`Receipt.tsx` can be checked against real output instead of
+  a screenshot of the on-screen confirmation view, which is what looked fine both times before.

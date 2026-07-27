@@ -23,6 +23,22 @@
     display: none !important;
   }
 
+  /* The app shell (Layout in App.tsx) is styled `minHeight: 100vh` for the
+   * on-screen case, and Chrome recomputes `vh` per *page* while printing —
+   * so an ancestor stuck at "at least one viewport tall" forces the print
+   * job to be at least one full page tall no matter how short the actual
+   * content is. Anything appended after that (even a few pixels of margin)
+   * then spills onto a genuinely blank second page. `!important` is needed
+   * because the 100vh comes from an inline style, which normal specificity
+   * cannot override. */
+  html,
+  body,
+  #root,
+  .ant-layout {
+    min-height: 0 !important;
+    height: auto !important;
+  }
+
   /* Default: nothing print-only is shown unless a specific mode is active —
      printing the confirmation screen as-is (Ctrl+P without picking a Print
      Center action) should still look reasonable, so screen-only content stays

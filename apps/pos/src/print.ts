@@ -7,9 +7,15 @@
 export type PrintMode = 'thermal' | 'tags';
 
 const PAGE_SIZE: Record<PrintMode, string> = {
-  // 80mm is the common thermal receipt roll width; height is left to the
-  // content, matching how thermal printers actually cut.
-  thermal: '80mm auto',
+  // CSS `@page size` only accepts one or two <length> values (or a page-size
+  // keyword) — `80mm auto` is not valid syntax, and a browser that rejects one
+  // token in the shorthand drops the whole declaration and falls back to the
+  // default paper size, which is what actually shipped here at first: content
+  // sized for a narrow receipt, printed onto a full-size page. 297mm (A4's
+  // height) is a generous ceiling no real receipt should hit; a continuous
+  // thermal roll printer's own driver still cuts to content length regardless
+  // of what this hint says.
+  thermal: '80mm 297mm',
   // A common thermal label size. The OS driver is free to substitute whatever
   // stock is actually loaded — this is a hint, not a hard constraint.
   tags: '62mm 100mm',

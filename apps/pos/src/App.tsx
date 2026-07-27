@@ -73,6 +73,7 @@ function Shell() {
   return (
     <Layout style={{ minHeight: '100vh' }}>
       <Layout.Header
+        className="no-print"
         style={{
           background: '#00695C',
           display: 'flex',

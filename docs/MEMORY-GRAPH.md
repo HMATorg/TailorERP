@@ -6,7 +6,7 @@
 > the repo — why something is blocked, what a trap looks like — belongs in the
 > auto-memory directory, not here.
 
-**Parent** `ebbc49b` on `main` · **generated** 2026-07-26 21:09Z · staged into the commit being created on top of it
+**Parent** `4a941c2` on `main` · **generated** 2026-07-27 08:08Z · staged into the commit being created on top of it
 
 _History below runs to the parent; the commit carrying this file is its child._
 
@@ -105,7 +105,7 @@ graph LR
 
 ## Engineering decisions
 
-48 recorded in `docs/ENGINEERING-DECISIONS.md`. "Cited by" counts source
+49 recorded in `docs/ENGINEERING-DECISIONS.md`. "Cited by" counts source
 files that reference the decision in a comment — an uncited decision is not wrong,
 but it is the first place to look when something has quietly been undone.
 
@@ -159,6 +159,7 @@ but it is the first place to look when something has quietly been undone.
 | `D-046` | The counter registers walk-ins itself, no admin round-trip | 5 file(s) |
 | `D-047` | Print Center — thermal, garment-tag barcodes, and the A4 invoice are three documents, not one | 3 file(s) |
 | `D-048` | `cashier` needs `view_inventory` because checkout structurally requires it | 2 file(s) |
+| `D-049` | The Print Center's first shipped version was never actually print-tested | — |
 
 ## Tests
 
@@ -174,6 +175,7 @@ currently skipped. They are a shape check, not a substitute for running the suit
 
 | Commit | Date | Subject |
 | --- | --- | --- |
+| `4a941c2` | 2026-07-27 | Let the counter register walk-ins and print a full Print Center |
 | `ebbc49b` | 2026-07-27 | Add rush-hour customer search to Counter (directory + name/phone search) |
 | `c07ca9c` | 2026-07-26 | Fix invoice page overflow; split POS/workshop RBAC; open up measurements |
 | `fff88f3` | 2026-07-26 | Drop the hook pre-filter that was missing real commits |

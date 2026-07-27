@@ -59,13 +59,6 @@ export default function Receipt() {
       message.warning('No tax invoice was issued for this order yet — see the warning below.');
       return;
     }
-    // Opened synchronously, inside the click handler's own call stack — a blank
-    // tab counts as a direct user gesture and is never popup-blocked. Opening it
-    // *after* the `await` below (the first version of this code did) loses that
-    // user-activation window in most browsers, so the tab silently never opens
-    // even though the request itself succeeds. Navigating this handle's
-    // `.location` once the blob is ready is not restricted the same way.
-    const target = window.open('', '_blank');
     setDownloadingPdf(true);
     try {
       // A plain window.open(apiUrl) would hit the API with no Authorization
@@ -75,16 +68,23 @@ export default function Receipt() {
       // server-side.
       const { data } = await api.get(`/invoices/${invoice.id}/download`, { responseType: 'blob' });
       const url = URL.createObjectURL(data);
-      if (target) {
-        target.location.href = url;
-      } else {
-        // Pop-ups are blocked at the browser level — fall back to a same-tab
-        // navigation rather than leaving the cashier with no way to reach the PDF.
-        window.location.href = url;
-      }
+      // window.open(url) — even called synchronously in the click handler, as
+      // an earlier version of this did — is still a *popup*, and some browsers'
+      // popup blockers reject it regardless of gesture freshness. A synthetic
+      // click on an <a target="_blank"> is a plain navigation, not a popup, and
+      // is what every "open/download this file" implementation relies on for
+      // that reason (verified: window.open succeeded in one real-browser test
+      // here but a real user still reported this failing, which is exactly the
+      // gap this closes rather than re-relies on the same mechanism).
+      const link = document.createElement('a');
+      link.href = url;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
     } catch (e) {
-      target?.close();
       message.error(errMsg(e));
     } finally {
       setDownloadingPdf(false);
