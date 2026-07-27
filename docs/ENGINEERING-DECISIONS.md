@@ -722,3 +722,35 @@ as filed when it was not.
   the same pipeline a physical "Save as PDF" uses — kept in the repo specifically so the next
   change to `print.css`/`print.ts`/`Receipt.tsx` can be checked against real output instead of
   a screenshot of the on-screen confirmation view, which is what looked fine both times before.
+
+## D-050: The A4 button downloads a file, it does not try to open a tab
+
+- **Two prior attempts at "open the invoice in a new tab" both failed for a real user in a
+  real browser** — first `window.open()` called after an `await` (D-047, lost the click's
+  user-activation window), then a synthetic click on `<a target="_blank">` (D-049, still a
+  popup by another name, rejected by some blockers regardless of gesture freshness). Two
+  failures of the same *family* of mechanism, reported firsthand rather than inferred, is a
+  reason to stop tuning that family rather than try a third variant of it.
+- **Decision:** stop trying to open a tab. `<a download>` forces a file download; it is not a
+  popup and is not subject to popup-blocker heuristics in any mainstream browser — it is the
+  same mechanism virtually every "export as PDF" feature on the web relies on for exactly this
+  reason. The cashier gets a saved `INV-2026-NNNNNN.pdf`, which is arguably closer to a real
+  handover anyway (a file to keep or forward) than a fragile preview tab.
+- **The button is now `disabled` (with a tooltip) when `!invoice`,** rather than only warning
+  on click. A silently-swallowed click and a genuinely broken button were indistinguishable
+  before this — both looked like nothing happened — which is exactly the ambiguity a real user
+  report ran into. Disabling makes the "no invoice yet" case visibly different from "click me."
+- **The verification tooling changed with it.** `apps/pos/scripts/verify-print-center.mjs`
+  previously listened for a `popup` event, which a correctly-working forced download will
+  *never* fire — that test would have reported false failure on the very code meant to fix
+  this. Switched to Playwright's `page.waitForEvent('download')`, which listens for the
+  browser's actual download-manager event and hands back the saved file directly. Confirmed
+  against real output, not an inference: the downloaded `INV-2026-NNNNNN.pdf` is a valid,
+  complete bilingual tax invoice with the correct VAT split and a scannable ZATCA QR.
+- **Process note, not just a code note:** the first fix (D-047) was reported working from one
+  successful Playwright click; that was true and remained true, but was not sufficient
+  evidence that *the mechanism* was safe across real browsers and real popup-blocker
+  configurations — only that it worked once in one environment. The second fix (D-049) added a
+  second real-environment success and was still wrong for the same underlying reason. What
+  actually closed it was changing the mechanism to one with no popup-blocker exposure at all,
+  not accumulating more single successful observations of one that had some.

@@ -95,20 +95,25 @@ async function capture(mode, pageSize, outFile) {
 await capture('thermal', '80mm 297mm', 'thermal.pdf');
 await capture('tags', '62mm 100mm', 'tags.pdf');
 
-let popupUrl = null;
-page.on('popup', (p) => {
-  popupUrl = p.url();
-  log('A4 popup opened:', popupUrl);
-});
-await page.locator('button:has-text("A4 tax invoice")').click();
-await page.waitForTimeout(2000);
+// The A4 button used to try to *open* the invoice in a new tab (window.open(),
+// then a synthetic <a target="_blank"> click) — both reported broken by a real
+// user in a real browser. It now forces a download via <a download>, which is
+// not a popup and isn't subject to popup-blocker heuristics at all. Proving
+// that needs Playwright's download event, not a popup listener — waiting for
+// a *popup* here would time out even on a correctly working button, since a
+// forced download deliberately never opens one.
+const [download] = await Promise.all([
+  page.waitForEvent('download', { timeout: 10_000 }),
+  page.locator('button:has-text("A4 tax invoice")').click(),
+]);
+const savedPath = `${OUT}/${download.suggestedFilename()}`;
+await download.saveAs(savedPath);
+log('A4 downloaded:', download.suggestedFilename());
 
-const openPages = browser.contexts()[0].pages().map((p) => p.url());
 writeFileSync(
   `${OUT}/a4-result.json`,
-  JSON.stringify({ popupDetected: !!popupUrl, popupUrl, openPages }, null, 2),
+  JSON.stringify({ downloaded: true, filename: download.suggestedFilename(), path: savedPath }, null, 2),
 );
-log('A4 result:', { popupDetected: !!popupUrl, openPages });
 
 await browser.close();
-log('done — inspect thermal.pdf / tags.pdf / a4-result.json in', OUT);
+log('done — inspect thermal.pdf / tags.pdf /', download.suggestedFilename(), '/ a4-result.json in', OUT);

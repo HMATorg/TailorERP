@@ -5,7 +5,7 @@ import {
   PrinterOutlined,
   TagsOutlined,
 } from '@ant-design/icons';
-import { Alert, Button, Card, Col, Descriptions, Row, Space, Table, Tag, Typography, message } from 'antd';
+import { Alert, Button, Card, Col, Descriptions, Row, Space, Table, Tag, Tooltip, Typography, message } from 'antd';
 import QRCode from 'qrcode';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { api, errMsg, useAuth } from '../api';
@@ -55,31 +55,29 @@ export default function Receipt() {
   }
 
   const downloadA4 = async () => {
-    if (!invoice?.id) {
-      message.warning('No tax invoice was issued for this order yet — see the warning below.');
-      return;
-    }
+    if (!invoice?.id) return; // button is disabled in this case — see render below
     setDownloadingPdf(true);
     try {
       // A plain window.open(apiUrl) would hit the API with no Authorization
       // header; fetching the bytes ourselves and handing the browser a blob URL
-      // keeps the request authenticated while still opening in the native PDF
-      // viewer, which has its own print button for the A4 page already laid out
-      // server-side.
+      // keeps the request authenticated.
+      //
+      // This used to try to *open* that blob in a new tab — first via
+      // window.open(), then via a synthetic <a target="_blank"> click, on the
+      // reasoning that a plain navigation isn't a popup. Both were reported
+      // broken by a real user in a real browser, on two separate attempts.
+      // Rather than tune a third variant of "open a tab," this forces a
+      // *download* instead: `<a download>` is not a popup and is not subject
+      // to popup-blocker heuristics at all in any mainstream browser — it is
+      // the same mechanism every "export as PDF" button on the web relies on,
+      // which is exactly why it is the safer bet after two failures of the
+      // open-a-tab family. The cashier gets a saved file rather than a fragile
+      // preview tab, which is also closer to how a real handover works.
       const { data } = await api.get(`/invoices/${invoice.id}/download`, { responseType: 'blob' });
       const url = URL.createObjectURL(data);
-      // window.open(url) — even called synchronously in the click handler, as
-      // an earlier version of this did — is still a *popup*, and some browsers'
-      // popup blockers reject it regardless of gesture freshness. A synthetic
-      // click on an <a target="_blank"> is a plain navigation, not a popup, and
-      // is what every "open/download this file" implementation relies on for
-      // that reason (verified: window.open succeeded in one real-browser test
-      // here but a real user still reported this failing, which is exactly the
-      // gap this closes rather than re-relies on the same mechanism).
       const link = document.createElement('a');
       link.href = url;
-      link.target = '_blank';
-      link.rel = 'noopener noreferrer';
+      link.download = `${invoice.invoiceNumber}.pdf`;
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -185,9 +183,19 @@ export default function Receipt() {
             >
               Print garment tags ({state.tickets?.length ?? 0})
             </Button>
-            <Button size="large" icon={<FilePdfOutlined />} loading={downloadingPdf} onClick={downloadA4}>
-              A4 tax invoice (PDF)
-            </Button>
+            <Tooltip
+              title={invoice ? undefined : 'No tax invoice was issued for this order — see the warning above'}
+            >
+              <Button
+                size="large"
+                icon={<FilePdfOutlined />}
+                loading={downloadingPdf}
+                disabled={!invoice}
+                onClick={downloadA4}
+              >
+                A4 tax invoice (PDF)
+              </Button>
+            </Tooltip>
           </Space>
 
           <div>
