@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Card, Result, Spin } from 'antd';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import axios from 'axios';
-import { errMsg } from '../api/client';
+import { api, errMsg } from '../api/client';
 import { useAuthStore } from '../stores/auth';
 
 /**
@@ -28,7 +27,7 @@ export default function Impersonate() {
     let cancelled = false;
     (async () => {
       try {
-        const { data } = await axios.get('/api/v1/auth/session', {
+        const { data } = await api.get('/auth/session', {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (cancelled) return;

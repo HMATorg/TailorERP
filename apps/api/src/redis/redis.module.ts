@@ -14,6 +14,7 @@ export const REDIS_CLIENT = 'REDIS_CLIENT';
         new Redis({
           host: config.get<string>('REDIS_HOST', 'localhost'),
           port: config.get<number>('REDIS_PORT', 6379),
+          password: config.get<string>('REDIS_PASSWORD') || undefined,
           maxRetriesPerRequest: 3,
           lazyConnect: false,
         }),

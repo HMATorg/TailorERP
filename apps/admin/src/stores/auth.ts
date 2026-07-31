@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import axios from 'axios';
 
+const API_BASE = import.meta.env.VITE_API_URL ?? '';
+
 export interface StoreSummary {
   id: string;
   name: string;
@@ -47,7 +49,7 @@ export const useAuthStore = create<AuthState>()(
       isImpersonating: false,
 
       async login(email, password) {
-        const { data } = await axios.post('/api/v1/auth/login', { email, password });
+        const { data } = await axios.post(`${API_BASE}/api/v1/auth/login`, { email, password });
         const isHq = data.user.orgRole === 'hq_admin';
         set({
           user: data.user,
@@ -62,7 +64,7 @@ export const useAuthStore = create<AuthState>()(
       logout() {
         const { refreshToken } = get();
         if (refreshToken) {
-          void axios.post('/api/v1/auth/logout', { refreshToken }).catch(() => undefined);
+          void axios.post(`${API_BASE}/api/v1/auth/logout`, { refreshToken }).catch(() => undefined);
         }
         set({
           user: null,
@@ -93,7 +95,7 @@ export const useAuthStore = create<AuthState>()(
         const { refreshToken } = get();
         if (!refreshToken) return false;
         try {
-          const { data } = await axios.post('/api/v1/auth/refresh', { refreshToken });
+          const { data } = await axios.post(`${API_BASE}/api/v1/auth/refresh`, { refreshToken });
           set({ accessToken: data.accessToken, refreshToken: data.refreshToken });
           return true;
         } catch {

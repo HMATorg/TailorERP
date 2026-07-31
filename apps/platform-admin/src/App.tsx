@@ -18,8 +18,7 @@ import {
   useLocation,
   useNavigate,
 } from 'react-router-dom';
-import axios from 'axios';
-import { errMsg, useAuth } from './api';
+import { api, errMsg, useAuth } from './api';
 import Audit from './pages/Audit';
 import Dashboard from './pages/Dashboard';
 import PlatformAdmins from './pages/PlatformAdmins';
@@ -46,7 +45,7 @@ function Login() {
           layout="vertical"
           onFinish={async (v) => {
             try {
-              const { data } = await axios.post('/api/v1/auth/platform/login', v);
+              const { data } = await api.post('/auth/platform/login', v);
               setSession(data);
               navigate('/');
             } catch (e) {

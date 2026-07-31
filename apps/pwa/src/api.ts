@@ -2,7 +2,9 @@ import axios, { AxiosError, type InternalAxiosRequestConfig } from 'axios';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-export const api = axios.create({ baseURL: '/api/v1' });
+const API_BASE = import.meta.env.VITE_API_URL ?? '';
+
+export const api = axios.create({ baseURL: `${API_BASE}/api/v1` });
 
 interface CustomerAuthState {
   customer: { id: string; fullName: string; language: string } | null;
@@ -49,7 +51,7 @@ api.interceptors.response.use(undefined, async (error: AxiosError) => {
     const { refreshToken, setTokens, logout } = useAuth.getState();
     if (refreshToken) {
       try {
-        const { data } = await axios.post('/api/v1/customer/auth/refresh', { refreshToken });
+        const { data } = await axios.post(`${API_BASE}/api/v1/customer/auth/refresh`, { refreshToken });
         setTokens(data.accessToken, data.refreshToken);
         return api(original);
       } catch {

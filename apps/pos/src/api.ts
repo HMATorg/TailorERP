@@ -5,7 +5,9 @@ import { persist } from 'zustand/middleware';
 
 export { garmentFamily };
 
-export const api = axios.create({ baseURL: '/api/v1' });
+const API_BASE = import.meta.env.VITE_API_URL ?? '';
+
+export const api = axios.create({ baseURL: `${API_BASE}/api/v1` });
 
 export interface StoreSummary {
   id: string;
@@ -43,7 +45,7 @@ export const useAuth = create<AuthState>()(
       accessToken: null,
       refreshToken: null,
       async login(email, password) {
-        const { data } = await axios.post('/api/v1/auth/login', { email, password });
+        const { data } = await axios.post(`${API_BASE}/api/v1/auth/login`, { email, password });
         // A counter tablet lives in one branch, so default to a real store
         // rather than the HQ "all stores" view, which cannot take an order.
         const store = data.stores.find((s: StoreSummary) => !s.isHeadquarters) ?? data.stores[0];
@@ -70,7 +72,7 @@ export const useAuth = create<AuthState>()(
         const { refreshToken } = get();
         if (!refreshToken) return false;
         try {
-          const { data } = await axios.post('/api/v1/auth/refresh', { refreshToken });
+          const { data } = await axios.post(`${API_BASE}/api/v1/auth/refresh`, { refreshToken });
           set({ accessToken: data.accessToken, refreshToken: data.refreshToken });
           return true;
         } catch {

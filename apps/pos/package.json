@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite --port 5176",
     "build": "tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "start": "serve -s dist -p ${PORT:-5176}"
   },
   "dependencies": {
     "@ant-design/icons": "^5.4.0",
@@ -21,6 +22,7 @@
     "react-dom": "^18.3.1",
     "react-i18next": "^17.0.11",
     "react-router-dom": "^6.26.0",
+    "serve": "^14.2.6",
     "zustand": "^4.5.4"
   },
   "devDependencies": {

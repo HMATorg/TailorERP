@@ -2,7 +2,9 @@ import axios, { AxiosError, type InternalAxiosRequestConfig } from 'axios';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-export const api = axios.create({ baseURL: '/api/v1' });
+const API_BASE = import.meta.env.VITE_API_URL ?? '';
+
+export const api = axios.create({ baseURL: `${API_BASE}/api/v1` });
 
 interface PlatformAuthState {
   user: { id: string; email: string; fullName: string | null; adminLevel: string } | null;
@@ -30,7 +32,7 @@ export const useAuth = create<PlatformAuthState>()(
         const { refreshToken } = get();
         if (!refreshToken) return false;
         try {
-          const { data } = await axios.post('/api/v1/auth/platform/refresh', { refreshToken });
+          const { data } = await axios.post(`${API_BASE}/api/v1/auth/platform/refresh`, { refreshToken });
           set({ accessToken: data.accessToken, refreshToken: data.refreshToken });
           return true;
         } catch {

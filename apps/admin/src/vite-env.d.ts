@@ -1,8 +1,6 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
-  /** Origin of apps/admin — the impersonation handoff link points here (D-060). */
-  readonly VITE_ADMIN_APP_URL?: string;
   /** Absolute origin of the API in production (e.g. https://api.example.com). Falls back to a relative path for local dev, where Vite proxies /api. */
   readonly VITE_API_URL?: string;
 }

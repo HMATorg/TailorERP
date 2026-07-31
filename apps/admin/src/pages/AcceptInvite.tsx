@@ -3,8 +3,7 @@ import { LockOutlined, UserOutlined } from '@ant-design/icons';
 import { Alert, Button, Card, Form, Input, Result, Typography } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import axios from 'axios';
-import { errMsg } from '../api/client';
+import { api, errMsg } from '../api/client';
 import LanguageSwitcher from '../components/LanguageSwitcher';
 
 export default function AcceptInvite() {
@@ -70,7 +69,7 @@ export default function AcceptInvite() {
           setLoading(true);
           setError(null);
           try {
-            await axios.post('/api/v1/users/accept-invite', { token, fullName, password });
+            await api.post('/users/accept-invite', { token, fullName, password });
             setDone(true);
           } catch (e) {
             setError(errMsg(e));

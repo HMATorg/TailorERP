@@ -1,7 +1,7 @@
 import axios, { AxiosError, type InternalAxiosRequestConfig } from 'axios';
 import { useAuthStore } from '../stores/auth';
 
-export const api = axios.create({ baseURL: '/api/v1' });
+export const api = axios.create({ baseURL: `${import.meta.env.VITE_API_URL ?? ''}/api/v1` });
 
 api.interceptors.request.use((config) => {
   const { accessToken, activeStoreId } = useAuthStore.getState();

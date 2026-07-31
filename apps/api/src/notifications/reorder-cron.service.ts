@@ -35,6 +35,7 @@ export class ReorderCronService implements OnModuleInit, OnModuleDestroy {
     const connection = {
       host: this.config.get<string>('REDIS_HOST', 'localhost'),
       port: this.config.get<number>('REDIS_PORT', 6379),
+      password: this.config.get<string>('REDIS_PASSWORD') || undefined,
     };
     this.queue = new Queue(QUEUE_NAMES.cron, { connection });
     await this.queue.upsertJobScheduler(REORDER_JOB, { pattern: '0 * * * *' });

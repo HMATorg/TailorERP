@@ -6,7 +6,7 @@
 > the repo — why something is blocked, what a trap looks like — belongs in the
 > auto-memory directory, not here.
 
-**Parent** `7079c76` on `main` · **generated** 2026-07-31 20:42Z · staged into the commit being created on top of it
+**Parent** `09e38cc` on `main` · **generated** 2026-07-31 21:57Z · staged into the commit being created on top of it
 
 _History below runs to the parent; the commit carrying this file is its child._
 
@@ -50,11 +50,11 @@ graph LR
 
 | App | Package | Dev port | TS/TSX files | Direct deps |
 | --- | --- | --- | --- | --- |
-| `apps/admin` | `@tailonix/admin` | 5173 | 26 | 11 |
+| `apps/admin` | `@tailonix/admin` | 5173 | 27 | 12 |
 | `apps/api` | `@tailonix/api` | 3000 | 143 | 24 |
-| `apps/platform-admin` | `@tailonix/platform-admin` | 5175 | 15 | 8 |
-| `apps/pos` | `@tailonix/pos` | 5176 | 15 | 13 |
-| `apps/pwa` | `@tailonix/pwa` | 5174 | 14 | 9 |
+| `apps/platform-admin` | `@tailonix/platform-admin` | 5175 | 15 | 9 |
+| `apps/pos` | `@tailonix/pos` | 5176 | 16 | 14 |
+| `apps/pwa` | `@tailonix/pwa` | 5174 | 15 | 10 |
 
 ## API modules
 
@@ -197,6 +197,7 @@ currently skipped. They are a shape check, not a substitute for running the suit
 
 | Commit | Date | Subject |
 | --- | --- | --- |
+| `09e38cc` | 2026-08-01 | Finalize Platform Admin: fix 3 real bugs, add account management/metrics/billing history, full test coverage (D-060) |
 | `7079c76` | 2026-08-01 | Complete ZATCA Fatoora Phase 2 e-invoicing integration (D-057-059) |
 | `2e76296` | 2026-08-01 | Add trouser measurements, tailor-shop reference fields, and Print Center reprint/settle flow (D-051-056) |
 | `a513690` | 2026-07-27 | Make the A4 button download a file instead of trying to open a tab |

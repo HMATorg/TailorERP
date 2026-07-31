@@ -66,6 +66,7 @@ export class NotificationWorker implements OnModuleInit, OnModuleDestroy {
         connection: {
           host: this.config.get<string>('REDIS_HOST', 'localhost'),
           port: this.config.get<number>('REDIS_PORT', 6379),
+          password: this.config.get<string>('REDIS_PASSWORD') || undefined,
         },
         concurrency: 5,
       },
