@@ -124,6 +124,7 @@ export class OrdersService {
           orderNumber,
           totalAmount: totalAmount.sub(dto.discountAmount ?? 0),
           discountAmount: dto.discountAmount ?? 0,
+          isUrgent: dto.isUrgent ?? false,
           dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
           notes: dto.notes,
           createdById: userId,
@@ -252,10 +253,43 @@ export class OrdersService {
         },
         payments: { orderBy: { createdAt: 'asc' } },
         createdBy: { select: { id: true, fullName: true } },
+        // Reprint needs exactly what Receipt.tsx's Print Center already
+        // renders after a fresh checkout — invoice + tickets — so reopening an
+        // order from history is one call, not a second endpoint (D-051).
+        invoice: {
+          select: {
+            id: true,
+            invoiceNumber: true,
+            icv: true,
+            netAmount: true,
+            vatAmount: true,
+            totalAmount: true,
+            qrCodeBase64: true,
+          },
+        },
+        tickets: {
+          orderBy: { createdAt: 'asc' },
+          select: {
+            id: true,
+            ticketCode: true,
+            station: true,
+            orderItem: { select: { garmentType: true } },
+          },
+        },
       },
     });
     if (!order) throw new NotFoundException('Order not found in this store');
-    return order;
+    return {
+      ...order,
+      // Flattened to match the shape pos.service.ts's checkout() response
+      // already carries — one ticket shape everywhere, not one per caller.
+      tickets: order.tickets.map((t) => ({
+        id: t.id,
+        ticketCode: t.ticketCode,
+        station: t.station,
+        garmentType: t.orderItem.garmentType,
+      })),
+    };
   }
 
   async updateStatus(

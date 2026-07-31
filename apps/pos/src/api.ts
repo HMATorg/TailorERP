@@ -1,6 +1,9 @@
 import axios, { AxiosError, type InternalAxiosRequestConfig } from 'axios';
+import { garmentFamily } from '@tailonix/shared';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+
+export { garmentFamily };
 
 export const api = axios.create({ baseURL: '/api/v1' });
 
@@ -135,16 +138,56 @@ export const STITCHING_OPTIONS = [
   { value: 'embroidered_zari', en: 'Embroidered Zari', ar: 'تطريز زري' },
 ] as const;
 
-/** M1–M8, with the Arabic names from the blueprint. */
+/** Regional cut (D-055) — read off a real tailor shop's own order form. */
+export const CUT_STYLE_OPTIONS = [
+  { value: 'saudi', en: 'Saudi', ar: 'سعودي' },
+  { value: 'kuwaiti', en: 'Kuwaiti', ar: 'كويتي' },
+  { value: 'qatari', en: 'Qatari', ar: 'قطري' },
+  { value: 'other', en: 'Other', ar: 'أخرى' },
+] as const;
+
+/**
+ * M1–M8 plus M9–M13 (D-055, added against a real tailor shop's own paper
+ * order form). Thobe/Bisht/Shirt — the "robe" family. m5HipWidth is labeled
+ * "Hip" now that m9Waist exists as the dedicated waist point.
+ */
 export const MEASUREMENT_POINTS = [
   { key: 'm1TotalLength', code: 'M1', en: 'Total Length', ar: 'الطول' },
   { key: 'm2ShoulderWidth', code: 'M2', en: 'Shoulder Width', ar: 'الكتف' },
   { key: 'm3SleeveLength', code: 'M3', en: 'Sleeve Length', ar: 'الكم' },
   { key: 'm4ChestCirc', code: 'M4', en: 'Chest', ar: 'الصدر' },
-  { key: 'm5HipWidth', code: 'M5', en: 'Waist / Hip', ar: 'الوسط' },
+  { key: 'm5HipWidth', code: 'M5', en: 'Hip', ar: 'الورك' },
   { key: 'm6NeckDiameter', code: 'M6', en: 'Neck', ar: 'الرقبة' },
   { key: 'm7WristOpening', code: 'M7', en: 'Wrist Opening', ar: 'الوسع' },
-  { key: 'm8SkirtPerimeter', code: 'M8', en: 'Skirt Perimeter', ar: 'الذيل' },
+  { key: 'm8SkirtPerimeter', code: 'M8', en: 'Hem (Ghera)', ar: 'الذيل' },
+  { key: 'm9Waist', code: 'M9', en: 'Waist', ar: 'الوسط' },
+  { key: 'm10RoundShoulder', code: 'M10', en: 'Round Shoulder', ar: 'الكتف المدور' },
+  { key: 'm11MidHand', code: 'M11', en: 'Mid of Hand', ar: 'منتصف اليد' },
+  { key: 'm12PlateLength', code: 'M12', en: 'Plate Length', ar: 'طول اللوح' },
+  { key: 'm13HalfChest', code: 'M13', en: 'Half Chest', ar: 'نصف الصدر' },
 ] as const;
 
-export type MeasurementKey = (typeof MEASUREMENT_POINTS)[number]['key'];
+/** T1–T7 — Trousers' own points (D-054). No sleeve/neck/hem in the M1-M8 sense. */
+export const TROUSER_MEASUREMENT_POINTS = [
+  { key: 't1Waist', code: 'T1', en: 'Waist', ar: 'الخصر' },
+  { key: 't2Hip', code: 'T2', en: 'Hip', ar: 'الورك' },
+  { key: 't3Inseam', code: 'T3', en: 'Inseam', ar: 'الداخلي' },
+  { key: 't4Outseam', code: 'T4', en: 'Outseam / Total Length', ar: 'الطول الكلي' },
+  { key: 't5Thigh', code: 'T5', en: 'Thigh', ar: 'الفخذ' },
+  { key: 't6Knee', code: 'T6', en: 'Knee', ar: 'الركبة' },
+  { key: 't7AnkleOpening', code: 'T7', en: 'Ankle Opening', ar: 'فتحة الأسفل' },
+] as const;
+
+export type RobeMeasurementKey = (typeof MEASUREMENT_POINTS)[number]['key'];
+export type TrouserMeasurementKey = (typeof TROUSER_MEASUREMENT_POINTS)[number]['key'];
+export type MeasurementKey = RobeMeasurementKey | TrouserMeasurementKey;
+
+/** Which point set + required fields apply to a garment's family. */
+export function measurementPointsFor(garmentType: string) {
+  return garmentFamily(garmentType) === 'trousers' ? TROUSER_MEASUREMENT_POINTS : MEASUREMENT_POINTS;
+}
+
+/** The minimum fields the yield formula needs for this family (D-054). */
+export function requiredMeasurementKeysFor(garmentType: string): MeasurementKey[] {
+  return garmentFamily(garmentType) === 'trousers' ? ['t4Outseam'] : ['m1TotalLength', 'm3SleeveLength'];
+}

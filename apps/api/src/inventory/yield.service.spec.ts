@@ -1,7 +1,12 @@
 import 'reflect-metadata';
 import { BadRequestException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { DEFAULT_MIN_USABLE_METERS, YieldService } from './yield.service';
+import {
+  DEFAULT_MIN_USABLE_METERS,
+  SHIRT_HEM_ALLOWANCE_METERS,
+  TROUSERS_HEM_ALLOWANCE_METERS,
+  YieldService,
+} from './yield.service';
 
 describe('YieldService (v4 Phase 2 material maths)', () => {
   const service = new YieldService();
@@ -48,6 +53,49 @@ describe('YieldService (v4 Phase 2 material maths)', () => {
       });
       expect(fromString.toFixed(2)).toBe(fromNumber.toFixed(2));
       expect(fromDecimal.toFixed(2)).toBe(fromNumber.toFixed(2));
+    });
+  });
+
+  describe('calculateRobe (D-054: Bisht/Shirt approximations)', () => {
+    it('defaults to the exact Thobe formula when no multiplier/allowance is given', () => {
+      const robe = service.calculateRobe({ totalLengthCm: 150, sleeveLengthCm: 62 });
+      const thobe = service.calculate({ totalLengthCm: 150, sleeveLengthCm: 62 });
+      expect(robe.toFixed(2)).toBe(thobe.toFixed(2));
+    });
+
+    it('applies a length×1 multiplier and Shirt allowance for a shorter garment', () => {
+      // 75cm length, 58cm sleeve → (0.75×1) + 0.58 + 0.15 = 1.48 m
+      const result = service.calculateRobe({
+        totalLengthCm: 75,
+        sleeveLengthCm: 58,
+        lengthMultiplier: 1,
+        hemAllowanceM: SHIRT_HEM_ALLOWANCE_METERS,
+      });
+      expect(result.toFixed(2)).toBe('1.48');
+    });
+
+    it('still requires both length and sleeve regardless of multiplier', () => {
+      expect(() =>
+        service.calculateRobe({ totalLengthCm: 75, sleeveLengthCm: 0, lengthMultiplier: 1 }),
+      ).toThrow(BadRequestException);
+    });
+  });
+
+  describe('calculateTrousers (D-054: approximation, no width model)', () => {
+    it('applies 2×outseam + the trousers allowance, no sleeve term', () => {
+      // 105cm outseam → (1.05×2) + 0.25 = 2.35 m
+      const result = service.calculateTrousers({ outseamCm: 105 });
+      expect(result.toFixed(2)).toBe('2.35');
+      expect(TROUSERS_HEM_ALLOWANCE_METERS.toFixed(2)).toBe('0.25');
+    });
+
+    it('multiplies across identical garments and rounds up', () => {
+      const result = service.calculateTrousers({ outseamCm: 105, quantity: 2 });
+      expect(result.toFixed(2)).toBe('4.70');
+    });
+
+    it('refuses to guess when the outseam is missing', () => {
+      expect(() => service.calculateTrousers({ outseamCm: 0 })).toThrow(/Outseam/);
     });
   });
 

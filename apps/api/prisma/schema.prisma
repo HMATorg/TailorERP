@@ -148,6 +148,16 @@ enum StitchingStyle {
   embroidered_zari
 }
 
+/// Regional thobe cut (D-055) — read off a real tailor shop's order form.
+/// Deliberately just the three regions we could confidently read; `other`
+/// covers the fourth option on that form until its exact name is confirmed.
+enum CutStyle {
+  saudi
+  kuwaiti
+  qatari
+  other
+}
+
 /// Workshop stations (Kanban columns) — التفصيل / الخياطة / الكوي والجودة
 enum ProductionStation {
   queued
@@ -437,6 +447,28 @@ model Measurement {
   m7WristOpening  Decimal? @map("m7_wrist_opening") @db.Decimal(6, 2) // الوسع
   m8SkirtPerimeter Decimal? @map("m8_skirt_perimeter") @db.Decimal(6, 2) // الذيل
 
+  // M9-M13 (D-055), added against a real tailor shop's own paper order form.
+  // m5HipWidth above predates this and was captured as a combined "Waist/Hip"
+  // point; m9Waist is the dedicated waist point going forward — historical
+  // m5 values are not retroactively split, since which one a cashier meant
+  // isn't recoverable.
+  m9Waist         Decimal? @map("m9_waist") @db.Decimal(6, 2) // الوسط (waist, distinct from hip)
+  m10RoundShoulder Decimal? @map("m10_round_shoulder") @db.Decimal(6, 2) // الكتف المدور
+  m11MidHand      Decimal? @map("m11_mid_hand") @db.Decimal(6, 2) // منتصف اليد
+  m12PlateLength  Decimal? @map("m12_plate_length") @db.Decimal(6, 2) // طول اللوح
+  m13HalfChest    Decimal? @map("m13_half_chest") @db.Decimal(6, 2) // نصف الصدر
+
+  // Trousers points, T1-T7 (D-054). Not a robe — no sleeve/neck/hem in the
+  // M1-M8 sense, so it gets its own matrix rather than force-fitting values
+  // into columns named for a thobe's construction.
+  t1Waist         Decimal? @map("t1_waist") @db.Decimal(6, 2) // الخصر
+  t2Hip           Decimal? @map("t2_hip") @db.Decimal(6, 2) // الورك
+  t3Inseam        Decimal? @map("t3_inseam") @db.Decimal(6, 2) // الداخلي
+  t4Outseam       Decimal? @map("t4_outseam") @db.Decimal(6, 2) // الطول الكلي
+  t5Thigh         Decimal? @map("t5_thigh") @db.Decimal(6, 2) // الفخذ
+  t6Knee          Decimal? @map("t6_knee") @db.Decimal(6, 2) // الركبة
+  t7AnkleOpening  Decimal? @map("t7_ankle_opening") @db.Decimal(6, 2) // فتحة الأسفل
+
   /// Any additional shop-specific points that do not fit the standard matrix
   extra       Json?
   notes       String?
@@ -694,6 +726,8 @@ model Order {
   paidAmount     Decimal     @default(0) @map("paid_amount") @db.Decimal(12, 2)
   dueDate        DateTime?   @map("due_date") @db.Date
   deliveredAt    DateTime?   @map("delivered_at")
+  /// Rush order flag (D-055) — read off a real tailor shop's order form ("مستعجل")
+  isUrgent       Boolean     @default(false) @map("is_urgent")
   notes          String?
   createdById    String?     @map("created_by") @db.Uuid
   createdAt      DateTime    @default(now()) @map("created_at")
@@ -741,6 +775,11 @@ model OrderItem {
   cuffStyle      CuffStyle?      @map("cuff_style")
   pocketStyle    PocketStyle?    @map("pocket_style")
   stitchingStyle StitchingStyle? @map("stitching_style")
+  /// Regional cut (D-055) — optional, Thobe-oriented; meaningless for Trousers etc.
+  cutStyle       CutStyle?       @map("cut_style")
+  /// Free text (e.g. "9x3") — a manufacturing spec, not a body measurement, so it
+  /// doesn't belong in the Measurement matrix (D-055)
+  cufflinkSize   String?         @map("cufflink_size") @db.VarChar(20)
 
   /// Fabric metres computed by the yield formula and held against a roll
   yieldMeters   Decimal? @map("yield_meters") @db.Decimal(12, 2)

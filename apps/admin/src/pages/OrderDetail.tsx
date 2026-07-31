@@ -34,6 +34,7 @@ interface OrderDetailData {
   discountAmount: string;
   dueDate: string | null;
   notes: string | null;
+  isUrgent: boolean;
   createdAt: string;
   customer: { id: string; fullName: string; phone: string; whatsappConsent: boolean };
   createdBy: { fullName: string | null } | null;
@@ -116,6 +117,11 @@ export default function OrderDetail() {
       <Space style={{ justifyContent: 'space-between', width: '100%' }} wrap>
         <Typography.Title level={4} style={{ margin: 0 }}>
           {order.orderNumber}{' '}
+          {order.isUrgent && (
+            <Tag color="red" style={{ marginInlineStart: 8 }}>
+              URGENT
+            </Tag>
+          )}
           <Tag color={ORDER_STATUS_COLORS[order.status]} style={{ marginInlineStart: 8 }}>
             {order.status}
           </Tag>

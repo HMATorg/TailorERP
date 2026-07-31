@@ -5,15 +5,34 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { canTransition, garmentFamily, type OrderStatus } from '@tailonix/shared';
 import { AuditService } from '../audit/audit.service';
 import { CounterService } from '../common/counter.service';
 import { ReservationService } from '../inventory/reservation.service';
-import { YieldService } from '../inventory/yield.service';
+import {
+  BISHT_HEM_ALLOWANCE_METERS,
+  HEM_ALLOWANCE_METERS,
+  SHIRT_HEM_ALLOWANCE_METERS,
+  TROUSERS_HEM_ALLOWANCE_METERS,
+  YieldService,
+} from '../inventory/yield.service';
 import { InvoicesService } from '../invoices/invoices.service';
 import { LedgerService } from '../ledger/ledger.service';
+import { OrderEventsPublisher } from '../orders/order-events.publisher';
 import { PrismaService } from '../prisma/prisma.service';
 import { WorkshopService } from '../workshop/workshop.service';
 import type { PosCheckoutDto } from './dto/pos.dto';
+
+/**
+ * Per-type robe-family yield parameters (D-054). Thobe's are the blueprint's
+ * exact figures; Bisht/Shirt are approximations pending real shop figures —
+ * see yield.service.ts for the rationale behind each allowance.
+ */
+const ROBE_YIELD_PARAMS: Record<string, { lengthMultiplier: number; hemAllowanceM: Prisma.Decimal }> = {
+  Thobe: { lengthMultiplier: 2, hemAllowanceM: HEM_ALLOWANCE_METERS },
+  Bisht: { lengthMultiplier: 2, hemAllowanceM: BISHT_HEM_ALLOWANCE_METERS },
+  Shirt: { lengthMultiplier: 1, hemAllowanceM: SHIRT_HEM_ALLOWANCE_METERS },
+};
 
 /**
  * Front-of-house checkout (v4 Phases 1–4). One call performs the whole counter
@@ -36,6 +55,7 @@ export class PosService {
     private readonly ledger: LedgerService,
     private readonly counters: CounterService,
     private readonly audit: AuditService,
+    private readonly events: OrderEventsPublisher,
   ) {}
 
   /**
@@ -133,6 +153,45 @@ export class PosService {
     return 'new';
   }
 
+  /**
+   * Dispatches to the right yield formula for this garment's family (D-054).
+   * Trousers has no sleeve/M1 concept at all — it needs its own required-field
+   * check, not the robe family's M1+M3 one.
+   */
+  private computeYield(
+    garmentType: string,
+    measurement: {
+      m1TotalLength: Prisma.Decimal | null;
+      m3SleeveLength: Prisma.Decimal | null;
+      t4Outseam: Prisma.Decimal | null;
+    },
+    quantity: number,
+  ): Prisma.Decimal {
+    if (garmentFamily(garmentType) === 'trousers') {
+      if (!measurement.t4Outseam) {
+        throw new BadRequestException('Active profile is missing T4 (outseam)');
+      }
+      return this.yieldService.calculateTrousers({
+        outseamCm: measurement.t4Outseam,
+        quantity,
+        hemAllowanceM: TROUSERS_HEM_ALLOWANCE_METERS,
+      });
+    }
+    if (!measurement.m1TotalLength || !measurement.m3SleeveLength) {
+      throw new BadRequestException(
+        'Active profile is missing M1 (total length) or M3 (sleeve length)',
+      );
+    }
+    const { lengthMultiplier, hemAllowanceM } = ROBE_YIELD_PARAMS[garmentType] ?? ROBE_YIELD_PARAMS.Thobe;
+    return this.yieldService.calculateRobe({
+      totalLengthCm: measurement.m1TotalLength,
+      sleeveLengthCm: measurement.m3SleeveLength,
+      quantity,
+      lengthMultiplier,
+      hemAllowanceM,
+    });
+  }
+
   /** Phase 2 preview: what a garment will cost in fabric, before committing. */
   async previewYield(customerId: string, garmentType: string, quantity = 1) {
     const measurement = await this.prisma.measurement.findFirst({
@@ -143,26 +202,13 @@ export class PosService {
         `No active measurement profile for ${garmentType} — take measurements first`,
       );
     }
-    if (!measurement.m1TotalLength || !measurement.m3SleeveLength) {
-      throw new BadRequestException(
-        'Active profile is missing M1 (total length) or M3 (sleeve length)',
-      );
-    }
-    const meters = this.yieldService.calculate({
-      totalLengthCm: measurement.m1TotalLength,
-      sleeveLengthCm: measurement.m3SleeveLength,
-      quantity,
-    });
+    const perGarment = this.computeYield(garmentType, measurement, 1);
+    const totalMeters = this.computeYield(garmentType, measurement, quantity);
     return {
       measurementId: measurement.id,
       version: measurement.version,
-      perGarment: this.yieldService
-        .calculate({
-          totalLengthCm: measurement.m1TotalLength,
-          sleeveLengthCm: measurement.m3SleeveLength,
-        })
-        .toFixed(2),
-      totalMeters: meters.toFixed(2),
+      perGarment: perGarment.toFixed(2),
+      totalMeters: totalMeters.toFixed(2),
       quantity,
     };
   }
@@ -181,27 +227,32 @@ export class PosService {
     // Resolve measurements and yields up front so we fail before writing anything.
     const prepared: {
       item: PosCheckoutDto['items'][number];
-      measurement: { id: string; m1TotalLength: Prisma.Decimal | null; m3SleeveLength: Prisma.Decimal | null };
+      measurement: {
+        id: string;
+        m1TotalLength: Prisma.Decimal | null;
+        m3SleeveLength: Prisma.Decimal | null;
+        t4Outseam: Prisma.Decimal | null;
+      };
       yieldMeters: Prisma.Decimal;
     }[] = [];
     for (const [index, item] of dto.items.entries()) {
       const measurement = await this.prisma.measurement.findFirst({
         where: { customerId: dto.customerId, garmentType: item.garmentType, isActive: true },
       });
-      if (!measurement?.m1TotalLength || !measurement?.m3SleeveLength) {
+      if (!measurement) {
         throw new BadRequestException(
-          `Garment ${index + 1} (${item.garmentType}): no active measurement profile with M1 and M3`,
+          `Garment ${index + 1} (${item.garmentType}): no active measurement profile`,
         );
       }
-      prepared.push({
-        item,
-        measurement,
-        yieldMeters: this.yieldService.calculate({
-          totalLengthCm: measurement.m1TotalLength,
-          sleeveLengthCm: measurement.m3SleeveLength,
-          quantity: item.quantity ?? 1,
-        }),
-      });
+      let yieldMeters: Prisma.Decimal;
+      try {
+        yieldMeters = this.computeYield(item.garmentType, measurement, item.quantity ?? 1);
+      } catch (err) {
+        throw new BadRequestException(
+          `Garment ${index + 1} (${item.garmentType}): ${(err as Error).message}`,
+        );
+      }
+      prepared.push({ item, measurement, yieldMeters });
     }
 
     const order = await this.prisma.$transaction(async (tx) => {
@@ -228,6 +279,7 @@ export class PosService {
           discountAmount: dto.discountAmount ?? 0,
           dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
           notes: dto.notes,
+          isUrgent: dto.isUrgent ?? false,
           createdById: userId,
         },
       });
@@ -246,6 +298,8 @@ export class PosService {
             cuffStyle: p.item.cuffStyle,
             pocketStyle: p.item.pocketStyle,
             stitchingStyle: p.item.stitchingStyle,
+            cutStyle: p.item.cutStyle,
+            cufflinkSize: p.item.cufflinkSize,
             yieldMeters: p.yieldMeters,
           },
         });
@@ -348,6 +402,7 @@ export class PosService {
       orderNumber: order.orderNumber,
       customerName: customer.fullName,
       dueDate: order.dueDate,
+      isUrgent: order.isUrgent,
       totalAmount: order.totalAmount.toFixed(2),
       paidAmount: order.paidAmount.toFixed(2),
       balanceDue: order.totalAmount.minus(order.paidAmount).toFixed(2),
@@ -401,6 +456,14 @@ export class PosService {
     // the order — a partial settlement leaves it held.
     const closesOrder = balance.minus(payment).isZero();
 
+    // Paying off the balance at the counter *is* the handover — a cashier who
+    // just collected the last riyal shouldn't need a separate manager trip to
+    // Workshop to mark the order delivered (D-051). This never blocks the
+    // payment itself: if production hasn't reached 'ready' yet the money is
+    // still recorded, the order just isn't auto-closed, and the response says
+    // so via `markedDelivered` so the counter can flag it for follow-up.
+    const willDeliver = closesOrder && canTransition(order.status as OrderStatus, 'delivered');
+
     const created = await this.prisma.$transaction(async (tx) => {
       const receipt = await tx.payment.create({
         data: {
@@ -413,8 +476,22 @@ export class PosService {
       });
       await tx.order.update({
         where: { id: orderId },
-        data: { paidAmount: paid.plus(payment) },
+        data: {
+          paidAmount: paid.plus(payment),
+          ...(willDeliver ? { status: 'delivered', deliveredAt: new Date() } : {}),
+        },
       });
+      if (willDeliver) {
+        await tx.orderStatusHistory.create({
+          data: {
+            orderId,
+            fromStatus: order.status,
+            toStatus: 'delivered',
+            note: 'Closed out at final settlement',
+            changedById: userId,
+          },
+        });
+      }
       await this.ledger.postSettlement(tx, {
         organizationId: order.organizationId,
         storeId,
@@ -438,14 +515,29 @@ export class PosService {
       newValue: {
         amount: payment.toFixed(2),
         depositReleasedFromLiability: deposits.toFixed(2),
+        markedDelivered: willDeliver,
       },
     });
+
+    if (willDeliver) {
+      await this.events.publishStatusChanged({
+        orderId,
+        organizationId: order.organizationId,
+        storeId,
+        customerId: order.customerId,
+        orderNumber: order.orderNumber,
+        fromStatus: order.status,
+        toStatus: 'delivered',
+      });
+    }
 
     return {
       paymentId: created.id,
       paidTotal: paid.plus(payment).toFixed(2),
       balanceDue: balance.minus(payment).toFixed(2),
       depositRealised: deposits.toFixed(2),
+      status: willDeliver ? 'delivered' : order.status,
+      markedDelivered: willDeliver,
     };
   }
 }

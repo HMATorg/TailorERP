@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Collapse, Descriptions, Drawer, Empty, Skeleton, Table, Tag, Typography } from 'antd';
 import { Link } from 'react-router-dom';
-import type { GarmentMeasurementHistory, MeasurementSnapshot } from '@tailonix/shared';
+import { garmentFamily, type GarmentMeasurementHistory, type MeasurementSnapshot } from '@tailonix/shared';
 import { api, errMsg } from '../api/client';
 
 interface CustomerDetail {
@@ -27,17 +27,41 @@ interface CustomerDetail {
   _count: { orders: number; appointments: number };
 }
 
-/** M1–M8, mirroring the labels the counter and workshop already use. */
+/**
+ * M1–M13, mirroring the labels the counter and workshop already use. Robe
+ * family: Thobe/Bisht/Shirt. M9-M13 added D-055 against a real tailor shop's
+ * own paper order form.
+ */
 const MEASUREMENT_POINTS = [
   { key: 'm1TotalLength', label: 'M1 · Total Length' },
   { key: 'm2ShoulderWidth', label: 'M2 · Shoulder' },
   { key: 'm3SleeveLength', label: 'M3 · Sleeve' },
   { key: 'm4ChestCirc', label: 'M4 · Chest' },
-  { key: 'm5HipWidth', label: 'M5 · Waist/Hip' },
+  { key: 'm5HipWidth', label: 'M5 · Hip' },
   { key: 'm6NeckDiameter', label: 'M6 · Neck' },
   { key: 'm7WristOpening', label: 'M7 · Wrist' },
   { key: 'm8SkirtPerimeter', label: 'M8 · Hem' },
+  { key: 'm9Waist', label: 'M9 · Waist' },
+  { key: 'm10RoundShoulder', label: 'M10 · Round Shoulder' },
+  { key: 'm11MidHand', label: 'M11 · Mid of Hand' },
+  { key: 'm12PlateLength', label: 'M12 · Plate Length' },
+  { key: 'm13HalfChest', label: 'M13 · Half Chest' },
 ] as const;
+
+/** T1–T7 — Trousers' own points (D-054). Not a robe: no sleeve, neck or hem. */
+const TROUSER_MEASUREMENT_POINTS = [
+  { key: 't1Waist', label: 'T1 · Waist' },
+  { key: 't2Hip', label: 'T2 · Hip' },
+  { key: 't3Inseam', label: 'T3 · Inseam' },
+  { key: 't4Outseam', label: 'T4 · Outseam' },
+  { key: 't5Thigh', label: 'T5 · Thigh' },
+  { key: 't6Knee', label: 'T6 · Knee' },
+  { key: 't7AnkleOpening', label: 'T7 · Ankle' },
+] as const;
+
+function pointsForGarmentType(garmentType: string) {
+  return garmentFamily(garmentType) === 'trousers' ? TROUSER_MEASUREMENT_POINTS : MEASUREMENT_POINTS;
+}
 
 /**
  * Full customer record for HQ oversight (v4 §1 amendment).
@@ -187,7 +211,7 @@ export default function CustomerDetailDrawer({
                           </span>
                         ),
                       },
-                      ...MEASUREMENT_POINTS.map((p) => ({
+                      ...pointsForGarmentType(garment.garmentType).map((p) => ({
                         title: p.label,
                         render: (_: unknown, v: MeasurementSnapshot) => v[p.key] ?? '—',
                       })),

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { LogoutOutlined, ScissorOutlined, ShopOutlined } from '@ant-design/icons';
+import { LogoutOutlined, ScissorOutlined, ShopOutlined, UnorderedListOutlined } from '@ant-design/icons';
 import { Alert, Button, Card, Form, Input, Layout, Segmented, Select, Space, Typography } from 'antd';
 import {
   BrowserRouter,
@@ -12,6 +12,8 @@ import {
 } from 'react-router-dom';
 import { errMsg, useAuth } from './api';
 import Counter from './pages/Counter';
+import OrderDetail from './pages/OrderDetail';
+import Orders from './pages/Orders';
 import Receipt from './pages/Receipt';
 import Workshop from './pages/Workshop';
 
@@ -68,7 +70,11 @@ function Shell() {
   const location = useLocation();
   if (!accessToken) return <Navigate to="/login" replace />;
 
-  const mode = location.pathname.startsWith('/workshop') ? 'workshop' : 'counter';
+  const mode = location.pathname.startsWith('/workshop')
+    ? 'workshop'
+    : location.pathname.startsWith('/orders')
+      ? 'orders'
+      : 'counter';
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
@@ -90,9 +96,12 @@ function Shell() {
           <Segmented
             size="large"
             value={mode}
-            onChange={(v) => navigate(v === 'workshop' ? '/workshop' : '/')}
+            onChange={(v) =>
+              navigate(v === 'workshop' ? '/workshop' : v === 'orders' ? '/orders' : '/')
+            }
             options={[
               { value: 'counter', label: 'Counter', icon: <ShopOutlined /> },
+              { value: 'orders', label: 'Orders', icon: <UnorderedListOutlined /> },
               { value: 'workshop', label: 'Workshop', icon: <ScissorOutlined /> },
             ]}
           />
@@ -131,6 +140,8 @@ export default function App() {
         <Route element={<Shell />}>
           <Route path="/" element={<Counter />} />
           <Route path="/receipt/:id" element={<Receipt />} />
+          <Route path="/orders" element={<Orders />} />
+          <Route path="/orders/:id" element={<OrderDetail />} />
           <Route path="/workshop" element={<Workshop />} />
         </Route>
       </Routes>

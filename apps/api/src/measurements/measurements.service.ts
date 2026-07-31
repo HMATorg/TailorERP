@@ -1,5 +1,6 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { garmentFamily, type MeasurementPoint } from '@tailonix/shared';
 import { PrismaService } from '../prisma/prisma.service';
 
 /**
@@ -28,6 +29,18 @@ export const MEASUREMENT_SELECT = {
   m6NeckDiameter: true,
   m7WristOpening: true,
   m8SkirtPerimeter: true,
+  m9Waist: true,
+  m10RoundShoulder: true,
+  m11MidHand: true,
+  m12PlateLength: true,
+  m13HalfChest: true,
+  t1Waist: true,
+  t2Hip: true,
+  t3Inseam: true,
+  t4Outseam: true,
+  t5Thigh: true,
+  t6Knee: true,
+  t7AnkleOpening: true,
   extra: true,
   notes: true,
   createdAt: true,
@@ -39,17 +52,49 @@ export type MeasurementSnapshot = Prisma.MeasurementGetPayload<{
   select: typeof MEASUREMENT_SELECT;
 }>;
 
-/** The eight standard points, in the order the diagram numbers them. */
-export const MEASUREMENT_POINTS = [
+/**
+ * The robe-family points (Thobe/Bisht/Shirt), in diagram order. M9-M13 added
+ * D-055 against a real tailor shop's own paper order form; m5HipWidth is
+ * relabeled "Hip" now that m9Waist exists as the dedicated waist point —
+ * historical rows captured under the old combined "Waist/Hip" meaning are
+ * unaffected, since the DB column itself is unchanged.
+ */
+export const MEASUREMENT_POINTS: readonly MeasurementPoint[] = [
   { key: 'm1TotalLength', label: 'Total length', labelAr: 'الطول' },
   { key: 'm2ShoulderWidth', label: 'Shoulder', labelAr: 'الكتف' },
   { key: 'm3SleeveLength', label: 'Sleeve', labelAr: 'الكم' },
   { key: 'm4ChestCirc', label: 'Chest', labelAr: 'الصدر' },
-  { key: 'm5HipWidth', label: 'Waist', labelAr: 'الوسط' },
+  { key: 'm5HipWidth', label: 'Hip', labelAr: 'الورك' },
   { key: 'm6NeckDiameter', label: 'Neck', labelAr: 'الرقبة' },
   { key: 'm7WristOpening', label: 'Wrist', labelAr: 'الوسع' },
-  { key: 'm8SkirtPerimeter', label: 'Hem', labelAr: 'الذيل' },
-] as const;
+  { key: 'm8SkirtPerimeter', label: 'Hem (Ghera)', labelAr: 'الذيل' },
+  { key: 'm9Waist', label: 'Waist', labelAr: 'الوسط' },
+  { key: 'm10RoundShoulder', label: 'Round Shoulder', labelAr: 'الكتف المدور' },
+  { key: 'm11MidHand', label: 'Mid of Hand', labelAr: 'منتصف اليد' },
+  { key: 'm12PlateLength', label: 'Plate Length', labelAr: 'طول اللوح' },
+  { key: 'm13HalfChest', label: 'Half Chest', labelAr: 'نصف الصدر' },
+];
+
+/** Trousers' own seven points (D-054) — no sleeve, neck or hem in the M1-M8 sense. */
+export const TROUSER_MEASUREMENT_POINTS: readonly MeasurementPoint[] = [
+  { key: 't1Waist', label: 'Waist', labelAr: 'الخصر' },
+  { key: 't2Hip', label: 'Hip', labelAr: 'الورك' },
+  { key: 't3Inseam', label: 'Inseam', labelAr: 'الداخلي' },
+  { key: 't4Outseam', label: 'Outseam / total length', labelAr: 'الطول الكلي' },
+  { key: 't5Thigh', label: 'Thigh', labelAr: 'الفخذ' },
+  { key: 't6Knee', label: 'Knee', labelAr: 'الركبة' },
+  { key: 't7AnkleOpening', label: 'Ankle opening', labelAr: 'فتحة الأسفل' },
+];
+
+/** The full point set across both families — what a client renders sparsely per snapshot. */
+export const ALL_MEASUREMENT_POINTS: readonly MeasurementPoint[] = [
+  ...MEASUREMENT_POINTS,
+  ...TROUSER_MEASUREMENT_POINTS,
+];
+
+export function pointsForGarmentType(garmentType: string): readonly MeasurementPoint[] {
+  return garmentFamily(garmentType) === 'trousers' ? TROUSER_MEASUREMENT_POINTS : MEASUREMENT_POINTS;
+}
 
 export interface GarmentMeasurementHistory {
   garmentType: string;
@@ -173,7 +218,7 @@ export class MeasurementsService {
         stitchingStyle: ticket.orderItem.stitchingStyle,
       },
       yieldMeters: ticket.orderItem.yieldMeters,
-      points: MEASUREMENT_POINTS,
+      points: pointsForGarmentType(ticket.orderItem.garmentType),
       /** What this garment is being cut to. */
       cutAgainst,
       /**

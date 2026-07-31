@@ -26,6 +26,7 @@ interface OrderRow {
   paidAmount: string;
   dueDate: string | null;
   createdAt: string;
+  isUrgent: boolean;
   customer: { id: string; fullName: string; phone: string };
   items: { garmentType: string; quantity: number }[];
 }
@@ -104,7 +105,11 @@ export default function Orders() {
           {
             title: t('order.orderNumber'),
             dataIndex: 'orderNumber',
-            render: (v: string, r) => <Link to={`/orders/${r.id}`}>{v}</Link>,
+            render: (v: string, r) => (
+              <span>
+                <Link to={`/orders/${r.id}`}>{v}</Link> {r.isUrgent && <Tag color="red">URGENT</Tag>}
+              </span>
+            ),
           },
           { title: t('order.customer'), render: (_, r) => r.customer.fullName },
           {

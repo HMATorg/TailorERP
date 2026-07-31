@@ -236,6 +236,47 @@ describe('POS checkout (e2e)', () => {
     expect(res.body.invoice.qrCodeBase64).toBeTruthy();
   });
 
+  it('checks out a Trousers garment using the T-matrix and the trousers yield formula (D-054)', async () => {
+    // Trousers has no M1/M3 concept at all — its own points, its own formula.
+    await prisma.measurement.updateMany({
+      where: { customerId, garmentType: 'Trousers' },
+      data: { isActive: false },
+    });
+    const lastTrousers = await prisma.measurement.findFirst({
+      where: { customerId, garmentType: 'Trousers' },
+      orderBy: { version: 'desc' },
+    });
+    await prisma.measurement.create({
+      data: {
+        customerId,
+        garmentType: 'Trousers',
+        version: (lastTrousers?.version ?? 0) + 1,
+        isActive: true,
+        t1Waist: 82,
+        t2Hip: 98,
+        t3Inseam: 78,
+        t4Outseam: 105,
+        t5Thigh: 58,
+        t6Knee: 42,
+        t7AnkleOpening: 38,
+      },
+    });
+
+    const res = await request(app.getHttpServer())
+      .post('/api/v1/pos/orders')
+      .set(auth())
+      .send({
+        customerId,
+        items: [{ garmentType: 'Trousers', fabricBatchId: batchId, unitPrice: 250 }],
+      })
+      .expect(201);
+    createdOrderIds.push(res.body.id);
+
+    expect(res.body.tickets[0].garmentType).toBe('Trousers');
+    // (1.05 × 2) + 0.25 trousers allowance = 2.35m — no sleeve term at all
+    expect(res.body.totalReservedMeters).toBe('2.35');
+  });
+
   it('deducts fabric only when the ticket leaves the cutting station', async () => {
     const orderId = createdOrderIds[0];
     const ticket = await prisma.productionTicket.findFirstOrThrow({ where: { orderId } });
@@ -297,8 +338,10 @@ describe('POS checkout (e2e)', () => {
     });
   });
 
-  it('settles the balance at handover', async () => {
+  it('settles the balance at handover without auto-closing an order that is not ready', async () => {
     const orderId = createdOrderIds[0];
+    // Still 'pending' at this point — the earlier tests only moved a single
+    // ticket's station, never the order's own status.
     const res = await request(app.getHttpServer())
       .post(`/api/v1/pos/orders/${orderId}/settle`)
       .set(auth())
@@ -307,6 +350,14 @@ describe('POS checkout (e2e)', () => {
 
     expect(res.body.balanceDue).toBe('0.00');
     expect(res.body.depositRealised).toBe('600.00');
+    // Money is never blocked on a workflow technicality, but an order still
+    // sitting in production must not be silently marked handed over (D-051).
+    expect(res.body.markedDelivered).toBe(false);
+    expect(res.body.status).toBe('pending');
+
+    const order = await prisma.order.findUniqueOrThrow({ where: { id: orderId } });
+    expect(order.status).toBe('pending');
+    expect(order.deliveredAt).toBeNull();
   });
 
   it('refuses to take more than the outstanding balance', async () => {
@@ -316,5 +367,90 @@ describe('POS checkout (e2e)', () => {
       .set(auth())
       .send({ amount: 100 })
       .expect(400);
+  });
+
+  it('exposes the order via the generic Orders API with invoice and tickets for reprint', async () => {
+    const orderId = createdOrderIds[0];
+    const res = await request(app.getHttpServer())
+      .get(`/api/v1/orders/${orderId}`)
+      .set(auth())
+      .expect(200);
+
+    expect(res.body.invoice).toEqual(
+      expect.objectContaining({
+        invoiceNumber: expect.any(String),
+        qrCodeBase64: expect.any(String),
+      }),
+    );
+    // Decimal fields serialize as their canonical numeric string (no forced
+    // trailing zeros), unlike pos.service.ts checkout()'s response, which
+    // calls .toFixed(2) explicitly — compare numerically here instead.
+    expect(Number(res.body.invoice.totalAmount)).toBe(1200);
+    expect(res.body.tickets).toHaveLength(3);
+    expect(res.body.tickets[0]).toEqual(
+      expect.objectContaining({
+        id: expect.any(String),
+        ticketCode: expect.any(String),
+        station: expect.any(String),
+        garmentType: 'Thobe',
+      }),
+    );
+
+    const order = await prisma.order.findUniqueOrThrow({ where: { id: orderId } });
+    const list = await request(app.getHttpServer())
+      .get('/api/v1/orders')
+      .set(auth())
+      .query({ search: order.orderNumber })
+      .expect(200);
+    expect(list.body.items.some((o: { id: string }) => o.id === orderId)).toBe(true);
+  });
+
+  it('closes the order out to delivered when the final payment lands on a ready order', async () => {
+    const customer = await prisma.customer.findUniqueOrThrow({ where: { id: customerId } });
+    const order = await prisma.order.create({
+      data: {
+        organizationId: customer.organizationId,
+        storeId,
+        customerId,
+        orderNumber: `ORD-TEST-${Date.now()}`,
+        totalAmount: 200,
+        paidAmount: 0,
+        status: 'ready',
+      },
+    });
+    createdOrderIds.push(order.id);
+    // A real order never reaches 'ready' without an invoice already issued —
+    // give this synthetic one one too, so the delivered-notification worker
+    // this test triggers has a real invoice to attach the PDF to.
+    await prisma.invoice.create({
+      data: {
+        organizationId: customer.organizationId,
+        orderId: order.id,
+        invoiceNumber: `INV-TEST-${Date.now()}`,
+        netAmount: 173.91,
+        vatAmount: 26.09,
+        totalAmount: 200,
+      },
+    });
+
+    const res = await request(app.getHttpServer())
+      .post(`/api/v1/pos/orders/${order.id}/settle`)
+      .set(auth())
+      .send({ amount: 200, method: 'cash' })
+      .expect(201);
+
+    expect(res.body.balanceDue).toBe('0.00');
+    expect(res.body.markedDelivered).toBe(true);
+    expect(res.body.status).toBe('delivered');
+
+    const updated = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+    expect(updated.status).toBe('delivered');
+    expect(updated.deliveredAt).not.toBeNull();
+
+    const history = await prisma.orderStatusHistory.findFirst({
+      where: { orderId: order.id, toStatus: 'delivered' },
+    });
+    expect(history).not.toBeNull();
+    expect(history?.note).toMatch(/settlement/i);
   });
 });

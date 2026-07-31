@@ -2,6 +2,7 @@ import { Type } from 'class-transformer';
 import {
   ArrayNotEmpty,
   IsArray,
+  IsBoolean,
   IsDateString,
   IsIn,
   IsNumber,
@@ -88,6 +89,11 @@ export class CreateOrderDto {
   @Min(0)
   @IsOptional()
   discountAmount?: number;
+
+  /** Rush order flag (D-055) — "مستعجل" on a real tailor shop's order form. */
+  @IsBoolean()
+  @IsOptional()
+  isUrgent?: boolean;
 
   @IsArray()
   @ArrayNotEmpty()

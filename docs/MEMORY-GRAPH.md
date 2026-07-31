@@ -6,7 +6,7 @@
 > the repo — why something is blocked, what a trap looks like — belongs in the
 > auto-memory directory, not here.
 
-**Parent** `3c157ae` on `main` · **generated** 2026-07-27 08:28Z · staged into the commit being created on top of it
+**Parent** `a513690` on `main` · **generated** 2026-07-31 20:41Z · staged into the commit being created on top of it
 
 _History below runs to the parent; the commit carrying this file is its child._
 
@@ -22,19 +22,25 @@ Edges are `imports:` declarations read out of each `*.module.ts`.
 
 ```mermaid
 graph LR
+  Auth --> FeatureGate
   Billing --> Auth
-  Billing --> Platform
+  Billing --> FeatureGate
   Customer --> Appointments
   Customer --> Measurements
   Customers --> Measurements
+  Inventory --> FeatureGate
   Invoices --> Zatca
+  Notifications --> FeatureGate
   Notifications --> Invoices
   Orders --> Inventory
   Orders --> Notifications
   Platform --> Auth
+  Platform --> FeatureGate
   Pos --> Inventory
   Pos --> Invoices
+  Pos --> Orders
   Pos --> Workshop
+  Team --> FeatureGate
   Team --> Notifications
   Workshop --> Inventory
   Workshop --> Measurements
@@ -44,46 +50,47 @@ graph LR
 
 | App | Package | Dev port | TS/TSX files | Direct deps |
 | --- | --- | --- | --- | --- |
-| `apps/admin` | `@tailonix/admin` | 5173 | 24 | 11 |
-| `apps/api` | `@tailonix/api` | 3000 | 125 | 21 |
-| `apps/platform-admin` | `@tailonix/platform-admin` | 5175 | 8 | 8 |
-| `apps/pos` | `@tailonix/pos` | 5176 | 12 | 13 |
+| `apps/admin` | `@tailonix/admin` | 5173 | 26 | 11 |
+| `apps/api` | `@tailonix/api` | 3000 | 143 | 24 |
+| `apps/platform-admin` | `@tailonix/platform-admin` | 5175 | 15 | 8 |
+| `apps/pos` | `@tailonix/pos` | 5176 | 15 | 13 |
 | `apps/pwa` | `@tailonix/pwa` | 5174 | 14 | 9 |
 
 ## API modules
 
-24 feature modules, all wired into `AppModule`.
+25 feature modules, all wired into `AppModule`.
 
 | Module | Path | Depends on |
 | --- | --- | --- |
 | `AppointmentsModule` | `apps/api/src/appointments/appointments.module.ts` | — |
 | `AuditModule` | `apps/api/src/audit/audit.module.ts` | — |
-| `AuthModule` | `apps/api/src/auth/auth.module.ts` | — |
-| `BillingModule` | `apps/api/src/billing/billing.module.ts` | `AuthModule`, `PlatformModule` |
+| `AuthModule` | `apps/api/src/auth/auth.module.ts` | `FeatureGateModule` |
+| `BillingModule` | `apps/api/src/billing/billing.module.ts` | `AuthModule`, `FeatureGateModule` |
 | `CommonModule` | `apps/api/src/common/common.module.ts` | — |
 | `CustomerModule` | `apps/api/src/customer-api/customer.module.ts` | `AppointmentsModule`, `MeasurementsModule` |
 | `CustomersModule` | `apps/api/src/customers/customers.module.ts` | `MeasurementsModule` |
 | `DashboardModule` | `apps/api/src/dashboard/dashboard.module.ts` | — |
+| `FeatureGateModule` | `apps/api/src/platform/feature-gate.module.ts` | — |
 | `HealthModule` | `apps/api/src/health/health.module.ts` | — |
-| `InventoryModule` | `apps/api/src/inventory/inventory.module.ts` | — |
+| `InventoryModule` | `apps/api/src/inventory/inventory.module.ts` | `FeatureGateModule` |
 | `InvoicesModule` | `apps/api/src/invoices/invoices.module.ts` | `ZatcaModule` |
 | `LedgerModule` | `apps/api/src/ledger/ledger.module.ts` | — |
 | `MeasurementsModule` | `apps/api/src/measurements/measurements.module.ts` | — |
-| `NotificationsModule` | `apps/api/src/notifications/notifications.module.ts` | `InvoicesModule` |
+| `NotificationsModule` | `apps/api/src/notifications/notifications.module.ts` | `InvoicesModule`, `FeatureGateModule` |
 | `OrdersModule` | `apps/api/src/orders/orders.module.ts` | `InventoryModule`, `NotificationsModule` |
-| `PlatformModule` | `apps/api/src/platform/platform.module.ts` | `AuthModule` |
-| `PosModule` | `apps/api/src/pos/pos.module.ts` | `InventoryModule`, `InvoicesModule`, `WorkshopModule` |
+| `PlatformModule` | `apps/api/src/platform/platform.module.ts` | `AuthModule`, `FeatureGateModule` |
+| `PosModule` | `apps/api/src/pos/pos.module.ts` | `InventoryModule`, `InvoicesModule`, `WorkshopModule`, `OrdersModule` |
 | `PrismaModule` | `apps/api/src/prisma/prisma.module.ts` | — |
 | `RedisModule` | `apps/api/src/redis/redis.module.ts` | — |
 | `StorageModule` | `apps/api/src/storage/storage.module.ts` | — |
 | `StoresModule` | `apps/api/src/stores/stores.module.ts` | — |
-| `TeamModule` | `apps/api/src/team/team.module.ts` | `NotificationsModule` |
+| `TeamModule` | `apps/api/src/team/team.module.ts` | `NotificationsModule`, `FeatureGateModule` |
 | `WorkshopModule` | `apps/api/src/workshop/workshop.module.ts` | `InventoryModule`, `MeasurementsModule` |
 | `ZatcaModule` | `apps/api/src/zatca/zatca.module.ts` | — |
 
 ## Data model
 
-36 models, 27 enums, 9 migrations.
+36 models, 28 enums, 13 migrations.
 
 <details><summary>Models</summary>
 
@@ -102,10 +109,14 @@ graph LR
 | 7 | `20260725100000_v4_tailoring_amendment` |
 | 8 | `20260726000000_double_entry_ledger` |
 | 9 | `20260726100000_document_counters` |
+| 10 | `20260727102924_add_trouser_measurement_points` |
+| 11 | `20260729075052_add_tailor_shop_reference_fields` |
+| 12 | `20260729183118_add_zatca_api_secret` |
+| 13 | `20260729184725_add_zatca_onboarding_stage` |
 
 ## Engineering decisions
 
-50 recorded in `docs/ENGINEERING-DECISIONS.md`. "Cited by" counts source
+60 recorded in `docs/ENGINEERING-DECISIONS.md`. "Cited by" counts source
 files that reference the decision in a comment — an uncited decision is not wrong,
 but it is the first place to look when something has quietly been undone.
 
@@ -128,9 +139,9 @@ but it is the first place to look when something has quietly been undone.
 | `D-015` | Notification channel priority and fallback | — |
 | `D-016` | `validateEnv` must return the whole config | — |
 | `D-017` | Service worker owns push (Workbox `injectManifest`) | — |
-| `D-018` | Stripe is the source of truth for subscription state | 1 file(s) |
+| `D-018` | Stripe is the source of truth for subscription state | 2 file(s) |
 | `D-019` | Stripe SDK v22 field relocations | — |
-| `D-020` | Billing degrades, it does not crash | — |
+| `D-020` | Billing degrades, it does not crash | 1 file(s) |
 | `D-021` | Invoice PDFs are Latin-only for now — **superseded by D-040** | — |
 | `D-022` | Invoices are generated, not stored-and-served | — |
 | `D-023` | Invoicing triggers on delivery | — |
@@ -139,7 +150,7 @@ but it is the first place to look when something has quietly been undone.
 | `D-026` | Index every foreign key | 1 file(s) |
 | `D-027` | Measurements become a versioned matrix, enforced by the database | — |
 | `D-028` | VAT is derived by subtraction, not by re-multiplication | — |
-| `D-029` | ZATCA Phase 2 — what is implemented and what needs onboarding | 1 file(s) |
+| `D-029` | ZATCA Phase 2 — what is implemented and what needs onboarding | 2 file(s) |
 | `D-030` | Compliance verification needs hash re-computation, not just chain linkage | — |
 | `D-031` | Reserve at checkout, deduct at cutting | — |
 | `D-032` | Yield is computed from the customer's own active measurements | — |
@@ -157,16 +168,26 @@ but it is the first place to look when something has quietly been undone.
 | `D-044` | One read model for measurements, and it is read-only | 2 file(s) |
 | `D-045` | The counter can browse and search customers, not just look one up exactly | 1 file(s) |
 | `D-046` | The counter registers walk-ins itself, no admin round-trip | 5 file(s) |
-| `D-047` | Print Center — thermal, garment-tag barcodes, and the A4 invoice are three documents, not one | 3 file(s) |
+| `D-047` | Print Center — thermal, garment-tag barcodes, and the A4 invoice are three documents, not one | 5 file(s) |
 | `D-048` | `cashier` needs `view_inventory` because checkout structurally requires it | 2 file(s) |
-| `D-049` | The Print Center's first shipped version was never actually print-tested | — |
-| `D-050` | The A4 button downloads a file, it does not try to open a tab | — |
+| `D-049` | The Print Center's first shipped version was never actually print-tested | 1 file(s) |
+| `D-050` | The A4 button downloads a file, it does not try to open a tab | 2 file(s) |
+| `D-051` | Counter can find, reprint, and settle a past order — and a full settlement closes it | 9 file(s) |
+| `D-052` | Measurement, yield, and fabric-roll selection were silently hardcoded to Thobe | — |
+| `D-053` | Checkout now sends the discount, due date, notes, and deposit-method fields the DTO already accepted | — |
+| `D-054` | Trousers gets its own measurement matrix, diagram and yield formula — not Thobe's, relabeled | 12 file(s) |
+| `D-055` | Five more Thobe measurement points, a cut-style/cufflink spec, and an urgent flag — read off a real tailor shop's own paper order form | 8 file(s) |
+| `D-056` | The measurement diagram moved every hotspot off the garment into labelled columns | — |
+| `D-057` | ZATCA Phase 2 — real XAdES signing, CSR generation, and the Reporting/Clearance client | 11 file(s) |
+| `D-058` | ZATCA onboarding orchestration — three explicit steps, a permission that didn't exist, and one deliberate non-feature | 7 file(s) |
+| `D-059` | A real ZATCA primary source arrived — corrects the CSR structure, the wire shapes, and renewal | 4 file(s) |
+| `D-060` | Platform Admin finalized — three real bugs, three missing features, and the module's first tests | 23 file(s) |
 
 ## Tests
 
 | Suite | Files | Declared cases |
 | --- | --- | --- |
-| unit | 12 | 130 |
+| unit | 23 | 247 |
 | e2e | 0 | 0 |
 
 Counts are parsed from `it(` / `test(` call sites, so they include any case that is
@@ -176,6 +197,7 @@ currently skipped. They are a shape check, not a substitute for running the suit
 
 | Commit | Date | Subject |
 | --- | --- | --- |
+| `a513690` | 2026-07-27 | Make the A4 button download a file instead of trying to open a tab |
 | `3c157ae` | 2026-07-27 | Fix Print Center: nav bar bleeding into every print, invalid @page, blocked A4 popup |
 | `4a941c2` | 2026-07-27 | Let the counter register walk-ins and print a full Print Center |
 | `ebbc49b` | 2026-07-27 | Add rush-hour customer search to Counter (directory + name/phone search) |

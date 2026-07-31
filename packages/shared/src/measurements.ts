@@ -14,18 +14,57 @@ export const MEASUREMENT_POINT_KEYS = [
   'm6NeckDiameter',
   'm7WristOpening',
   'm8SkirtPerimeter',
+  // M9-M13 (D-055), added against a real tailor shop's own paper order form.
+  'm9Waist',
+  'm10RoundShoulder',
+  'm11MidHand',
+  'm12PlateLength',
+  'm13HalfChest',
 ] as const;
 
 export type MeasurementPointKey = (typeof MEASUREMENT_POINT_KEYS)[number];
 
+/**
+ * Trousers is not a robe — it has no sleeve, no neck, no hem in the M1-M8
+ * sense, and the M1-M8 column names are literally named for a thobe's
+ * construction (D-054). Its own seven points, same "shared so every surface
+ * agrees" reasoning as the M-matrix above.
+ */
+export const TROUSER_POINT_KEYS = [
+  't1Waist',
+  't2Hip',
+  't3Inseam',
+  't4Outseam',
+  't5Thigh',
+  't6Knee',
+  't7AnkleOpening',
+] as const;
+
+export type TrouserPointKey = (typeof TROUSER_POINT_KEYS)[number];
+
+/** Every point key across every garment family — the full column set a snapshot may carry. */
+export type AnyPointKey = MeasurementPointKey | TrouserPointKey;
+
 export interface MeasurementPoint {
-  key: MeasurementPointKey;
+  key: AnyPointKey;
   label: string;
   labelAr: string;
 }
 
+/**
+ * Thobe, Bisht and Shirt are all "long garment with body + sleeve + neck +
+ * hem" shapes — the M1-M8 matrix genuinely applies to all three, just with
+ * different typical values. Trousers is the only family with a disjoint
+ * measurement vocabulary. Defaults unknown types to 'robe' rather than
+ * throwing, since garmentType is a free string (D-051) and a new type should
+ * degrade to the more common family, not break.
+ */
+export function garmentFamily(garmentType: string): 'robe' | 'trousers' {
+  return garmentType === 'Trousers' ? 'trousers' : 'robe';
+}
+
 /** One immutable snapshot. Superseded versions are kept, never overwritten. */
-export interface MeasurementSnapshot extends Partial<Record<MeasurementPointKey, string | null>> {
+export interface MeasurementSnapshot extends Partial<Record<AnyPointKey, string | null>> {
   id: string;
   garmentType: string;
   version: number;

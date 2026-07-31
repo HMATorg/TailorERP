@@ -21,7 +21,7 @@ import {
 } from '../appointments/dto/appointments.dto';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { AccessTokenPayload } from '../auth/auth.types';
-import { MEASUREMENT_POINTS, MeasurementsService } from '../measurements/measurements.service';
+import { ALL_MEASUREMENT_POINTS, MeasurementsService } from '../measurements/measurements.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CustomerGuard } from './customer.guard';
 
@@ -125,10 +125,16 @@ export class CustomerController {
     return this.measurements.myHistory(principal.sub);
   }
 
-  /** Field labels (en/ar) so the PWA can render the diagram without hardcoding. */
+  /**
+   * Field labels (en/ar) so the PWA can render the diagram without hardcoding.
+   * Returns both garment families' points; the PWA's existing per-snapshot
+   * `filled()` already renders only whichever keys that snapshot actually
+   * carries, so a Trousers snapshot shows its own T-points and a robe
+   * snapshot shows its M-points with no PWA changes needed (D-054).
+   */
   @Get('measurements/points')
   measurementPoints() {
-    return MEASUREMENT_POINTS;
+    return ALL_MEASUREMENT_POINTS;
   }
 
   @Get('stores')

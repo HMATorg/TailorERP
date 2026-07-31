@@ -1,11 +1,15 @@
 import { useCallback, useEffect, useState } from 'react';
 import { CloseOutlined, DeleteOutlined, PlusOutlined, ShoppingCartOutlined } from '@ant-design/icons';
 import {
+  Alert,
   Button,
   Card,
+  Checkbox,
   Col,
+  DatePicker,
   Divider,
   Empty,
+  Input,
   InputNumber,
   Row,
   Segmented,
@@ -18,15 +22,18 @@ import {
   Typography,
   message,
 } from 'antd';
+import dayjs, { type Dayjs } from 'dayjs';
 import { useNavigate } from 'react-router-dom';
 import {
   COLLAR_OPTIONS,
   CUFF_OPTIONS,
-  MEASUREMENT_POINTS,
+  CUT_STYLE_OPTIONS,
   POCKET_OPTIONS,
   STITCHING_OPTIONS,
   api,
   errMsg,
+  measurementPointsFor,
+  requiredMeasurementKeysFor,
   type MeasurementKey,
 } from '../api';
 import CustomerPicker from '../components/CustomerPicker';
@@ -53,10 +60,18 @@ interface Garment {
   cuffStyle?: string;
   pocketStyle?: string;
   stitchingStyle?: string;
+  cutStyle?: string;
+  cufflinkSize?: string;
   unitPrice: number;
 }
 
 const GARMENT_TYPES = ['Thobe', 'Bisht', 'Shirt', 'Trousers'];
+const DEPOSIT_METHODS: { value: 'cash' | 'card' | 'transfer' | 'other'; label: string }[] = [
+  { value: 'cash', label: 'Cash' },
+  { value: 'card', label: 'Card' },
+  { value: 'transfer', label: 'Bank transfer' },
+  { value: 'other', label: 'Other' },
+];
 const newGarment = (n: number): Garment => ({
   key: `g${n}-${Date.now()}`,
   garmentType: 'Thobe',
@@ -77,15 +92,26 @@ export default function Counter() {
 
   const [garments, setGarments] = useState<Garment[]>([newGarment(1)]);
   const [activeTab, setActiveTab] = useState('0');
-  const [rolls, setRolls] = useState<Roll[]>([]);
-  const [yieldPer, setYieldPer] = useState<number | null>(null);
+  // Yield and sellable rolls depend on garment type, not just quantity — a
+  // Shirt and a Thobe need different fabric and can't share one global value
+  // (D-051, fixing a bug where every garment was silently measured and cut
+  // against the Thobe profile regardless of its own selected type).
+  const [yieldByType, setYieldByType] = useState<Record<string, number | null>>({});
+  const [rollsByType, setRollsByType] = useState<Record<string, Roll[]>>({});
   const [deposit, setDeposit] = useState<number>(0);
+  const [depositMethod, setDepositMethod] = useState<'cash' | 'card' | 'transfer' | 'other'>('cash');
+  const [discount, setDiscount] = useState<number>(0);
+  const [dueDate, setDueDate] = useState<Dayjs | null>(null);
+  const [notes, setNotes] = useState('');
+  const [isUrgent, setIsUrgent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   const customer = lookup?.found ? lookup.customer : null;
-  const activeThobeProfile = lookup?.activeMeasurements?.find(
-    (m: Record<string, unknown>) => m.garmentType === 'Thobe',
-  );
+  const activeGarmentType = garments[Number(activeTab)]?.garmentType ?? 'Thobe';
+  const profileFor = (garmentType: string): Record<string, unknown> | undefined =>
+    lookup?.activeMeasurements?.find((m: Record<string, unknown>) => m.garmentType === garmentType);
+  const activeProfile = profileFor(activeGarmentType);
+  const hasAnyProfile = (lookup?.activeMeasurements?.length ?? 0) > 0;
 
   /** Opens the full profile for a customer picked from the search list. */
   const openCustomer = async (customerId: string) => {
@@ -97,6 +123,10 @@ export default function Counter() {
       setGarments([newGarment(1)]);
       setActiveTab('0');
       setDeposit(0);
+      setDiscount(0);
+      setDueDate(null);
+      setNotes('');
+      setIsUrgent(false);
     } catch (e) {
       message.error(errMsg(e));
     } finally {
@@ -108,17 +138,6 @@ export default function Counter() {
   const loadProfile = async (customerId: string) => {
     const { data } = await api.get(`/pos/customers/${customerId}`);
     setLookup(data);
-    const active = data.activeMeasurements?.find(
-      (m: Record<string, unknown>) => m.garmentType === 'Thobe',
-    );
-    const next: Partial<Record<MeasurementKey, number | null>> = {};
-    if (active) {
-      for (const p of MEASUREMENT_POINTS) {
-        const v = active[p.key];
-        next[p.key] = v == null ? null : Number(v);
-      }
-    }
-    setMeasurements(next);
   };
 
   const changeCustomer = () => {
@@ -127,17 +146,40 @@ export default function Counter() {
     setGarments([newGarment(1)]);
     setActiveTab('0');
     setDeposit(0);
+    setDiscount(0);
+    setDueDate(null);
+    setNotes('');
+    setIsUrgent(false);
   };
+
+  // The Measurements panel always edits whichever garment tab is active —
+  // switching tabs (or changing a tab's Type) reloads the form from that
+  // type's saved profile instead of always showing Thobe's. Trousers has its
+  // own point set entirely (T1-T7, no M1-M8 at all) — D-054.
+  const activePoints = measurementPointsFor(activeGarmentType);
+  useEffect(() => {
+    const active = profileFor(activeGarmentType);
+    const next: Partial<Record<MeasurementKey, number | null>> = {};
+    for (const p of activePoints) {
+      const v = active?.[p.key];
+      next[p.key] = v == null ? null : Number(v);
+    }
+    setMeasurements(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeGarmentType, lookup]);
 
   const saveMeasurements = async () => {
     if (!customer) return;
     setSavingM(true);
     try {
+      // Only send this family's own fields — a Trousers save must not carry
+      // stale robe values (or vice versa) into the new row.
+      const payload = Object.fromEntries(activePoints.map((p) => [p.key, measurements[p.key]]));
       const { data } = await api.post(`/customers/${customer.id}/measurements`, {
-        garmentType: 'Thobe',
-        ...measurements,
+        garmentType: activeGarmentType,
+        ...payload,
       });
-      message.success(`Measurement profile v${data.version} saved`);
+      message.success(`${activeGarmentType} measurement profile v${data.version} saved`);
       await loadProfile(customer.id);
     } catch (e) {
       message.error(errMsg(e));
@@ -146,25 +188,44 @@ export default function Counter() {
     }
   };
 
-  /** Live yield + sellable rolls whenever measurements or garment count change. */
+  const garmentTypeKey = garments.map((g) => g.garmentType).join('|');
+
+  /** Live yield + sellable rolls per distinct garment type in the cart. */
   const refreshStock = useCallback(async () => {
-    if (!customer || !activeThobeProfile) return;
-    try {
-      const { data: y } = await api.get(`/pos/customers/${customer.id}/yield`, {
-        params: { garmentType: 'Thobe', quantity: garments.length },
-      });
-      setYieldPer(Number(y.perGarment));
-      const { data: r } = await api.get('/inventory/sellable', {
-        params: { requiredMeters: y.perGarment },
-      });
-      setRolls(r);
-    } catch (e) {
-      setYieldPer(null);
-      setRolls([]);
-      // A missing M1/M3 is expected before measurements are taken — not an error toast.
-      if (!String(errMsg(e)).includes('measurement')) message.error(errMsg(e));
-    }
-  }, [customer, activeThobeProfile, garments.length]);
+    if (!customer) return;
+    const countByType = garments.reduce<Record<string, number>>((acc, g) => {
+      acc[g.garmentType] = (acc[g.garmentType] ?? 0) + 1;
+      return acc;
+    }, {});
+    const nextYield: Record<string, number | null> = {};
+    const nextRolls: Record<string, Roll[]> = {};
+    await Promise.all(
+      Object.keys(countByType).map(async (type) => {
+        if (!profileFor(type)) {
+          nextYield[type] = null;
+          nextRolls[type] = [];
+          return;
+        }
+        try {
+          const { data: y } = await api.get(`/pos/customers/${customer.id}/yield`, {
+            params: { garmentType: type, quantity: countByType[type] },
+          });
+          nextYield[type] = Number(y.perGarment);
+          const { data: r } = await api.get('/inventory/sellable', {
+            params: { requiredMeters: y.perGarment },
+          });
+          nextRolls[type] = r;
+        } catch (e) {
+          nextYield[type] = null;
+          nextRolls[type] = [];
+          if (!String(errMsg(e)).includes('measurement')) message.error(errMsg(e));
+        }
+      }),
+    );
+    setYieldByType(nextYield);
+    setRollsByType(nextRolls);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customer, garmentTypeKey, lookup]);
 
   useEffect(() => {
     void refreshStock();
@@ -173,10 +234,16 @@ export default function Counter() {
   const update = (index: number, patch: Partial<Garment>) =>
     setGarments((g) => g.map((item, i) => (i === index ? { ...item, ...patch } : item)));
 
-  const total = garments.reduce((sum, g) => sum + (g.unitPrice || 0), 0);
-  const totalYield = yieldPer ? (yieldPer * garments.length).toFixed(2) : null;
+  const grossTotal = garments.reduce((sum, g) => sum + (g.unitPrice || 0), 0);
+  const total = Math.max(0, grossTotal - discount);
+  const totalYield = garments.every((g) => yieldByType[g.garmentType] != null)
+    ? garments.reduce((sum, g) => sum + (yieldByType[g.garmentType] ?? 0), 0).toFixed(2)
+    : null;
   const readyToCheckout =
-    customer && garments.length > 0 && garments.every((g) => g.fabricBatchId) && yieldPer;
+    customer &&
+    garments.length > 0 &&
+    garments.every((g) => g.fabricBatchId) &&
+    garments.every((g) => yieldByType[g.garmentType] != null);
 
   const checkout = async () => {
     setSubmitting(true);
@@ -184,7 +251,11 @@ export default function Counter() {
       const { data } = await api.post('/pos/orders', {
         customerId: customer.id,
         depositAmount: deposit || undefined,
-        depositMethod: 'card',
+        depositMethod,
+        discountAmount: discount || undefined,
+        dueDate: dueDate ? dueDate.format('YYYY-MM-DD') : undefined,
+        notes: notes || undefined,
+        isUrgent: isUrgent || undefined,
         items: garments.map((g) => ({
           garmentType: g.garmentType,
           fabricBatchId: g.fabricBatchId,
@@ -192,6 +263,8 @@ export default function Counter() {
           cuffStyle: g.cuffStyle,
           pocketStyle: g.pocketStyle,
           stitchingStyle: g.stitchingStyle,
+          cutStyle: g.cutStyle,
+          cufflinkSize: g.cufflinkSize || undefined,
           unitPrice: g.unitPrice,
         })),
       });
@@ -245,11 +318,11 @@ export default function Counter() {
           {/* Phase 1 §2: measurement verification on the 2D blueprint */}
           <Col xs={24} xl={11}>
             <Card
-              title="Measurements (cm)"
+              title={`Measurements — ${activeGarmentType}`}
               size="small"
               extra={
-                activeThobeProfile ? (
-                  <Tag color="blue">active v{activeThobeProfile.version}</Tag>
+                activeProfile ? (
+                  <Tag color="blue">active v{String(activeProfile.version)}</Tag>
                 ) : (
                   <Tag color="red">none on file</Tag>
                 )
@@ -257,6 +330,7 @@ export default function Counter() {
               style={{ marginBlockEnd: 16 }}
             >
               <MeasurementDiagram
+                points={activePoints}
                 values={measurements}
                 onChange={(k, v) => setMeasurements((m) => ({ ...m, [k]: v }))}
               />
@@ -267,13 +341,18 @@ export default function Counter() {
                 style={{ marginBlockStart: 16 }}
                 loading={savingM}
                 onClick={saveMeasurements}
-                disabled={!measurements.m1TotalLength || !measurements.m3SleeveLength}
+                disabled={!requiredMeasurementKeysFor(activeGarmentType).every((k) => measurements[k] != null)}
               >
                 Save as new version
               </Button>
-              {(!measurements.m1TotalLength || !measurements.m3SleeveLength) && (
+              {!requiredMeasurementKeysFor(activeGarmentType).every((k) => measurements[k] != null) && (
                 <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                  M1 and M3 are required — the fabric yield is calculated from them.
+                  {requiredMeasurementKeysFor(activeGarmentType)
+                    .map((k) => activePoints.find((p) => p.key === k)?.code)
+                    .join(' and ')}{' '}
+                  {requiredMeasurementKeysFor(activeGarmentType).length > 1 ? 'are' : 'is'} required — the fabric
+                  yield is calculated from{' '}
+                  {requiredMeasurementKeysFor(activeGarmentType).length > 1 ? 'them' : 'it'}.
                 </Typography.Text>
               )}
             </Card>
@@ -296,7 +375,7 @@ export default function Counter() {
                 </Button>
               }
             >
-              {!activeThobeProfile ? (
+              {!hasAnyProfile ? (
                 <Empty description="Save a measurement profile first" />
               ) : (
                 <>
@@ -330,6 +409,15 @@ export default function Counter() {
                               />
                             </Col>
                           </Row>
+
+                          {!profileFor(g.garmentType) && (
+                            <Alert
+                              type="warning"
+                              showIcon
+                              message={`No measurement profile saved for ${g.garmentType} yet`}
+                              description="Switch to this tab's type in the Measurements panel and save one before a fabric roll can be selected."
+                            />
+                          )}
 
                           <div>
                             <div style={{ fontSize: 13, color: '#757575' }}>Collar</div>
@@ -374,24 +462,57 @@ export default function Counter() {
                             </Col>
                           </Row>
 
+                          {g.garmentType !== 'Trousers' && (
+                            <Row gutter={12}>
+                              <Col span={12}>
+                                <div style={{ fontSize: 13, color: '#757575' }}>Cut style</div>
+                                <Select
+                                  size="large"
+                                  style={{ width: '100%' }}
+                                  allowClear
+                                  placeholder="Not specified"
+                                  value={g.cutStyle}
+                                  onChange={(v) => update(i, { cutStyle: v })}
+                                  options={CUT_STYLE_OPTIONS.map((o) => ({ value: o.value, label: o.en }))}
+                                />
+                              </Col>
+                              <Col span={12}>
+                                <div style={{ fontSize: 13, color: '#757575' }}>Cufflink size</div>
+                                <Input
+                                  size="large"
+                                  placeholder="e.g. 9x3"
+                                  value={g.cufflinkSize}
+                                  onChange={(e) => update(i, { cufflinkSize: e.target.value })}
+                                />
+                              </Col>
+                            </Row>
+                          )}
+
                           <div>
                             <div style={{ fontSize: 13, color: '#757575' }}>
                               Fabric roll{' '}
-                              {yieldPer && <Tag color="blue">needs {yieldPer.toFixed(2)}m</Tag>}
+                              {yieldByType[g.garmentType] != null && (
+                                <Tag color="blue">needs {yieldByType[g.garmentType]!.toFixed(2)}m</Tag>
+                              )}
                             </div>
                             <Select
                               size="large"
                               style={{ width: '100%' }}
-                              placeholder={rolls.length ? 'Select a roll' : 'No roll can supply this yield'}
+                              disabled={!profileFor(g.garmentType)}
+                              placeholder={
+                                (rollsByType[g.garmentType]?.length ?? 0) > 0
+                                  ? 'Select a roll'
+                                  : 'No roll can supply this yield'
+                              }
                               value={g.fabricBatchId}
                               onChange={(v) => update(i, { fabricBatchId: v })}
-                              options={rolls.map((r) => ({
+                              options={(rollsByType[g.garmentType] ?? []).map((r) => ({
                                 value: r.id,
                                 label: `${r.fabricName} · ${r.batchCode}${r.origin ? ` · ${r.origin}` : ''} — ${r.available}m avail, ${r.remainderAfter}m after`,
                               }))}
                               notFoundContent={
                                 <Typography.Text type="danger">
-                                  Every roll would drop below its {rolls[0]?.minUsable ?? '3.50'}m minimum
+                                  Every roll would drop below its {rollsByType[g.garmentType]?.[0]?.minUsable ?? '3.50'}m minimum
                                 </Typography.Text>
                               }
                             />
@@ -448,8 +569,65 @@ export default function Counter() {
                     </Col>
                   </Row>
 
+                  <Row gutter={16} align="middle" style={{ marginBlockStart: 16 }}>
+                    <Col xs={12} md={6}>
+                      <div style={{ fontSize: 13, color: '#757575' }}>Discount (SAR)</div>
+                      <InputNumber
+                        size="large"
+                        min={0}
+                        max={grossTotal}
+                        value={discount}
+                        onChange={(v) => setDiscount(v ?? 0)}
+                        style={{ width: '100%' }}
+                      />
+                    </Col>
+                    <Col xs={12} md={6}>
+                      <div style={{ fontSize: 13, color: '#757575' }}>Due date</div>
+                      <DatePicker
+                        size="large"
+                        style={{ width: '100%' }}
+                        value={dueDate}
+                        onChange={setDueDate}
+                        disabledDate={(d) => d.isBefore(dayjs().startOf('day'))}
+                      />
+                    </Col>
+                    <Col xs={24} md={12}>
+                      <div style={{ fontSize: 13, color: '#757575' }}>Deposit method</div>
+                      <Select
+                        size="large"
+                        style={{ width: '100%' }}
+                        value={depositMethod}
+                        onChange={setDepositMethod}
+                        options={DEPOSIT_METHODS}
+                      />
+                    </Col>
+                  </Row>
+
+                  <Row style={{ marginBlockStart: 16 }}>
+                    <Col span={24}>
+                      <div style={{ fontSize: 13, color: '#757575' }}>Notes</div>
+                      <Input.TextArea
+                        rows={2}
+                        value={notes}
+                        onChange={(e) => setNotes(e.target.value)}
+                        placeholder="Anything the workshop or next cashier should know"
+                      />
+                    </Col>
+                  </Row>
+
+                  <Row style={{ marginBlockStart: 12 }}>
+                    <Col span={24}>
+                      <Checkbox checked={isUrgent} onChange={(e) => setIsUrgent(e.target.checked)}>
+                        <Typography.Text strong={isUrgent} type={isUrgent ? 'danger' : undefined}>
+                          Urgent order
+                        </Typography.Text>
+                      </Checkbox>
+                    </Col>
+                  </Row>
+
                   <Button
                     type="primary"
+                    danger={isUrgent}
                     size="large"
                     block
                     icon={<ShoppingCartOutlined />}
@@ -458,7 +636,7 @@ export default function Counter() {
                     loading={submitting}
                     onClick={checkout}
                   >
-                    Checkout · SAR {total.toFixed(2)}
+                    {isUrgent && 'URGENT · '}Checkout · SAR {total.toFixed(2)}
                     {deposit > 0 && ` · deposit ${deposit.toFixed(2)}`}
                   </Button>
                 </>

@@ -2,6 +2,7 @@ import { Type } from 'class-transformer';
 import {
   ArrayNotEmpty,
   IsArray,
+  IsBoolean,
   IsDateString,
   IsEnum,
   IsIn,
@@ -18,6 +19,7 @@ import {
 import {
   CollarStyle,
   CuffStyle,
+  CutStyle,
   PocketStyle,
   StitchingStyle,
 } from '@prisma/client';
@@ -52,6 +54,17 @@ export class PosGarmentDto {
   @IsEnum(StitchingStyle)
   @IsOptional()
   stitchingStyle?: StitchingStyle;
+
+  /** Regional cut (D-055) — Thobe-oriented; leave unset for other garment types. */
+  @IsEnum(CutStyle)
+  @IsOptional()
+  cutStyle?: CutStyle;
+
+  /** Free text, e.g. "9x3" — a manufacturing spec, not a body measurement (D-055) */
+  @IsString()
+  @MaxLength(20)
+  @IsOptional()
+  cufflinkSize?: string;
 
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
@@ -98,6 +111,11 @@ export class PosCheckoutDto {
   @IsString()
   @IsOptional()
   notes?: string;
+
+  /** Rush order flag (D-055) — "مستعجل" on a real tailor shop's order form. */
+  @IsBoolean()
+  @IsOptional()
+  isUrgent?: boolean;
 }
 
 export class PosSettleDto {

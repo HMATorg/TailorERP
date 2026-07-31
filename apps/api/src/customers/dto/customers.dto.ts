@@ -110,6 +110,80 @@ export class CreateMeasurementDto {
   @IsOptional()
   m8SkirtPerimeter?: number; // الذيل
 
+  // M9-M13 (D-055), added against a real tailor shop's own paper order form.
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(400)
+  @IsOptional()
+  m9Waist?: number; // الوسط
+
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(400)
+  @IsOptional()
+  m10RoundShoulder?: number; // الكتف المدور
+
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(400)
+  @IsOptional()
+  m11MidHand?: number; // منتصف اليد
+
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(400)
+  @IsOptional()
+  m12PlateLength?: number; // طول اللوح
+
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(400)
+  @IsOptional()
+  m13HalfChest?: number; // نصف الصدر
+
+  // Trousers points, T1-T7 (D-054) — not a robe, so not part of the M-matrix above.
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(400)
+  @IsOptional()
+  t1Waist?: number; // الخصر
+
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(400)
+  @IsOptional()
+  t2Hip?: number; // الورك
+
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(400)
+  @IsOptional()
+  t3Inseam?: number; // الداخلي
+
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(400)
+  @IsOptional()
+  t4Outseam?: number; // الطول الكلي
+
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(400)
+  @IsOptional()
+  t5Thigh?: number; // الفخذ
+
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(400)
+  @IsOptional()
+  t6Knee?: number; // الركبة
+
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(400)
+  @IsOptional()
+  t7AnkleOpening?: number; // فتحة الأسفل
+
   /** Shop-specific points outside the standard matrix */
   @IsObject()
   @IsOptional()
