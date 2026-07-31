@@ -6,7 +6,7 @@
 > the repo — why something is blocked, what a trap looks like — belongs in the
 > auto-memory directory, not here.
 
-**Parent** `09e38cc` on `main` · **generated** 2026-07-31 21:57Z · staged into the commit being created on top of it
+**Parent** `ec7e69d` on `main` · **generated** 2026-07-31 21:58Z · staged into the commit being created on top of it
 
 _History below runs to the parent; the commit carrying this file is its child._
 
@@ -116,7 +116,7 @@ graph LR
 
 ## Engineering decisions
 
-60 recorded in `docs/ENGINEERING-DECISIONS.md`. "Cited by" counts source
+61 recorded in `docs/ENGINEERING-DECISIONS.md`. "Cited by" counts source
 files that reference the decision in a comment — an uncited decision is not wrong,
 but it is the first place to look when something has quietly been undone.
 
@@ -182,6 +182,7 @@ but it is the first place to look when something has quietly been undone.
 | `D-058` | ZATCA onboarding orchestration — three explicit steps, a permission that didn't exist, and one deliberate non-feature | 8 file(s) |
 | `D-059` | A real ZATCA primary source arrived — corrects the CSR structure, the wire shapes, and renewal | 4 file(s) |
 | `D-060` | Platform Admin finalized — three real bugs, three missing features, and the module's first tests | 23 file(s) |
+| `D-061` | First real deploy attempt exposed five gaps a dev-only setup never surfaces | — |
 
 ## Tests
 
@@ -197,6 +198,7 @@ currently skipped. They are a shape check, not a substitute for running the suit
 
 | Commit | Date | Subject |
 | --- | --- | --- |
+| `ec7e69d` | 2026-08-01 | Make the API and all four SPAs deployable on Railway (D-061) |
 | `09e38cc` | 2026-08-01 | Finalize Platform Admin: fix 3 real bugs, add account management/metrics/billing history, full test coverage (D-060) |
 | `7079c76` | 2026-08-01 | Complete ZATCA Fatoora Phase 2 e-invoicing integration (D-057-059) |
 | `2e76296` | 2026-08-01 | Add trouser measurements, tailor-shop reference fields, and Print Center reprint/settle flow (D-051-056) |

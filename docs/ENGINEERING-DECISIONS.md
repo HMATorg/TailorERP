@@ -1297,3 +1297,69 @@ as filed when it was not.
   live-verified in a real browser against the dev database: login, tenant provisioning, plan
   changes, suspend/reactivate, impersonate → land in `apps/admin` already signed in, create/revoke a
   platform admin, and the dashboard's numbers checked against direct Postgres queries.
+
+## D-061: First real deploy attempt exposed five gaps a dev-only setup never surfaces
+
+- **Trigger:** connecting the repo to Railway and deploying revealed the whole stack had only ever
+  been proven in a mode where `npm install` at the repo root happens once and stays put, every
+  frontend is proxied through Vite's own dev server, and Postgres/Redis are always at
+  `localhost` with no auth. None of that holds on a platform that does a clean install per
+  deploy and serves each app from its own domain.
+- **The API's Prisma client was never generated on a fresh install.** `apps/api/package.json` had
+  no `postinstall` and `build` was plain `nest build` — the very first Railway build failed with
+  `Namespace "Prisma" has no exported member 'InputJsonValue'` and similar, because `nest build`
+  ran against whatever stub `.prisma/client` output was already on disk from a local `npm install`
+  months ago, not a client generated from this schema. Locally this was invisible: a fresh
+  `prisma generate` had been run by hand often enough that the generated client just sat in
+  `node_modules` indefinitely. Fixed with `postinstall: prisma generate` and
+  `build: prisma generate && nest build`; `start` now also runs `prisma migrate deploy` first, since
+  a freshly provisioned production database has no schema applied to it at all.
+- **No Redis/BullMQ connection anywhere accepted a password.** `redis.module.ts`,
+  `notifications.module.ts`, `notification.worker.ts`, and `reorder-cron.service.ts` all built a
+  bare `{host, port}` connection object. The local Docker Compose Redis has no auth, so this never
+  mattered until Railway's managed Redis — which always requires one — was in the picture. Added
+  `password: config.get('REDIS_PASSWORD') || undefined` to all four.
+- **Every one of the four Vite SPAs was being started with `vite dev` in production.** Railway's
+  GitHub connector auto-created one service per workspace and guessed a start command from
+  whatever scripts existed; none of the four had a `"start"` script, so it fell back to `dev`.
+  A dev server is not meant to serve real traffic and, more immediately, none of the services had
+  a public domain yet either, so this had gone unnoticed. Added a `"start": "serve -s dist -p
+  ${PORT:-<port>}"` script (the `-s` flag rewrites unmatched routes to `index.html`, required for
+  client-side routing — verified directly: a request to a nonexistent deep route like
+  `/orders/some-fake-id` returns the app shell with 200, not a 404) to each of `admin`, `pos`,
+  `pwa`, and `platform-admin`. `serve`'s `-l` flag takes a listen *URI*, not a bare port number,
+  and silently no-ops on one — confirmed by testing both and finding `-l` bound to serve's own
+  default port regardless of the value passed; `-p` is the correct flag for a plain port.
+- **Every frontend called the API through a hardcoded relative `/api/v1` path**, in the shared
+  `api` client instance and, separately, in nine raw `axios.post`/`axios.get` calls used for
+  login/refresh/logout specifically to bypass the response interceptor and avoid recursing back
+  into itself on a 401. A relative path only resolves correctly when something proxies `/api` to
+  the API server — true for every local dev server (`vite.config.ts`'s own proxy) and therefore
+  never once exercised any other way. In production each SPA is served from its own domain with no
+  proxy in front of it, so a relative path resolves against the *frontend's* own origin instead of
+  the API's. Added `VITE_API_URL` (build-time, baked into the bundle by Vite — not readable at
+  runtime) with a fallback to the empty string, so the relative-path behavior is unchanged for
+  local dev and every absolute call becomes `${VITE_API_URL}/api/v1/...` in production. The nine
+  raw-axios call sites needed the same prefix threaded through by hand, since they deliberately
+  don't go through the configured `api` instance.
+- **Railway's Hobby plan caps a project at 5 services and 3 volumes.** The connector had already
+  used all 5 on the four SPAs plus the API before any database existed. Postgres and Redis both
+  need one service (with a volume) each — provisioning both was not possible without either
+  upgrading the plan, dropping an app, or moving a database off Railway entirely. This is a cost/
+  scope decision, not an engineering one — surfaced to the user rather than guessed at. Resolved by
+  removing `apps/pwa`'s Railway service (the codebase itself is untouched; the customer PWA can be
+  redeployed once there's room) and provisioning Postgres. **Redis has not been provisioned yet**
+  for the same reason — the project is back at 5/5 services. The API boots and serves core
+  traffic without it (`RedisModule`'s client and every `BullMQ` `Queue`/`Worker` construct
+  asynchronously and don't block or crash Nest's bootstrap on a failed connection), but WhatsApp
+  delivery, the hourly reorder-alert cron, and the OTP flow's rate-limit/code storage are degraded
+  or non-functional until it exists. This is a known, temporary gap, not a silent one.
+- **Secrets were generated, not requested.** `JWT_ACCESS_SECRET`/`JWT_REFRESH_SECRET` (64-byte
+  base64url), `TOKEN_ENCRYPTION_KEY` (32-byte hex, matching the shape `zatca-submit.spec.ts` and
+  `zatca-onboarding.spec.ts` already assume), and a VAPID key pair are all self-contained
+  cryptographic material with no external party to ask — generated locally with Node's `crypto`
+  and the already-installed `web-push` CLI helper and set directly on the API service. Nothing
+  requiring a real third-party credential (Stripe, WhatsApp Cloud API, ZATCA, an SMS gateway) was
+  invented or guessed; those remain unset, and the features that need them degrade the way D-020
+  and D-029 already designed them to — a 503 on billing routes, `zatca_not_onboarded` on submit —
+  rather than crashing.
