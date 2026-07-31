@@ -6,7 +6,7 @@
 > the repo — why something is blocked, what a trap looks like — belongs in the
 > auto-memory directory, not here.
 
-**Parent** `ec7e69d` on `main` · **generated** 2026-07-31 21:58Z · staged into the commit being created on top of it
+**Parent** `f383753` on `main` · **generated** 2026-07-31 22:04Z · staged into the commit being created on top of it
 
 _History below runs to the parent; the commit carrying this file is its child._
 
@@ -198,6 +198,7 @@ currently skipped. They are a shape check, not a substitute for running the suit
 
 | Commit | Date | Subject |
 | --- | --- | --- |
+| `f383753` | 2026-08-01 | Document D-061: Railway deployment readiness fixes |
 | `ec7e69d` | 2026-08-01 | Make the API and all four SPAs deployable on Railway (D-061) |
 | `09e38cc` | 2026-08-01 | Finalize Platform Admin: fix 3 real bugs, add account management/metrics/billing history, full test coverage (D-060) |
 | `7079c76` | 2026-08-01 | Complete ZATCA Fatoora Phase 2 e-invoicing integration (D-057-059) |

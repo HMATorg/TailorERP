@@ -38,7 +38,13 @@ export class ReorderCronService implements OnModuleInit, OnModuleDestroy {
       password: this.config.get<string>('REDIS_PASSWORD') || undefined,
     };
     this.queue = new Queue(QUEUE_NAMES.cron, { connection });
-    await this.queue.upsertJobScheduler(REORDER_JOB, { pattern: '0 * * * *' });
+    // Deliberately not awaited: without a reachable Redis this call sits in
+    // ioredis's offline queue indefinitely, and Nest awaits onModuleInit
+    // before completing bootstrap — blocking it here means app.listen() is
+    // never reached and the whole API becomes unreachable, not just cron.
+    this.queue.upsertJobScheduler(REORDER_JOB, { pattern: '0 * * * *' }).catch((err) => {
+      this.logger.error(`Failed to schedule reorder-check job: ${(err as Error).message}`);
+    });
 
     this.worker = new Worker(
       QUEUE_NAMES.cron,

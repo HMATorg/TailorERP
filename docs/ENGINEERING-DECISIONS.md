@@ -1349,11 +1349,28 @@ as filed when it was not.
   scope decision, not an engineering one — surfaced to the user rather than guessed at. Resolved by
   removing `apps/pwa`'s Railway service (the codebase itself is untouched; the customer PWA can be
   redeployed once there's room) and provisioning Postgres. **Redis has not been provisioned yet**
-  for the same reason — the project is back at 5/5 services. The API boots and serves core
-  traffic without it (`RedisModule`'s client and every `BullMQ` `Queue`/`Worker` construct
-  asynchronously and don't block or crash Nest's bootstrap on a failed connection), but WhatsApp
-  delivery, the hourly reorder-alert cron, and the OTP flow's rate-limit/code storage are degraded
-  or non-functional until it exists. This is a known, temporary gap, not a silent one.
+  for the same reason — the project is back at 5/5 services.
+- **The first live deploy without Redis 502'd outright — not a graceful degradation.** The
+  assumption above (`RedisModule`'s client and every `BullMQ` `Queue`/`Worker` construct
+  asynchronously, so nothing should block boot) was correct for three of the four Redis-touching
+  services but wrong for the fourth: `ReorderCronService.onModuleInit()` did `await
+  this.queue.upsertJobScheduler(...)`. Nest awaits every module's `onModuleInit` before
+  `NestFactory.create()` resolves, and `app.listen()` is the line immediately after that in
+  `main.ts` — so an `onModuleInit` that never resolves means the HTTP port never opens, not just
+  that cron doesn't run. With `enableOfflineQueue` on (ioredis's default) and no reachable Redis,
+  that call sits in the offline queue forever: the process stays alive (hence the endless
+  `ECONNREFUSED` retry logs in Railway's deploy logs) but never binds a port, which is exactly
+  what a 502 "Application failed to respond" looks like from the edge proxy — indistinguishable
+  from a genuine crash without reading past the Redis noise to notice `app.listen()`'s log line
+  never appears. Caught by actually curling the deployed health endpoint after the "SUCCESS"
+  deployment status, not by trusting the status — Railway marks a deployment successful once the
+  container starts without exiting, which says nothing about whether the app inside it ever opened
+  its port. Fixed by not awaiting the scheduler registration
+  (`this.queue.upsertJobScheduler(...).catch(...)` instead) — it still registers once Redis exists
+  and reconnects, it just no longer gates the rest of the process on that happening first. WhatsApp
+  delivery, the reorder-alert cron itself, and the OTP flow's rate-limit/code storage remain
+  degraded or non-functional until Redis exists; the API as a whole reaching its listeners is no
+  longer contingent on it.
 - **Secrets were generated, not requested.** `JWT_ACCESS_SECRET`/`JWT_REFRESH_SECRET` (64-byte
   base64url), `TOKEN_ENCRYPTION_KEY` (32-byte hex, matching the shape `zatca-submit.spec.ts` and
   `zatca-onboarding.spec.ts` already assume), and a VAPID key pair are all self-contained
