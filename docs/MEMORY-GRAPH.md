@@ -6,7 +6,7 @@
 > the repo — why something is blocked, what a trap looks like — belongs in the
 > auto-memory directory, not here.
 
-**Parent** `2e76296` on `main` · **generated** 2026-07-31 20:41Z · staged into the commit being created on top of it
+**Parent** `7079c76` on `main` · **generated** 2026-07-31 20:42Z · staged into the commit being created on top of it
 
 _History below runs to the parent; the commit carrying this file is its child._
 
@@ -197,6 +197,7 @@ currently skipped. They are a shape check, not a substitute for running the suit
 
 | Commit | Date | Subject |
 | --- | --- | --- |
+| `7079c76` | 2026-08-01 | Complete ZATCA Fatoora Phase 2 e-invoicing integration (D-057-059) |
 | `2e76296` | 2026-08-01 | Add trouser measurements, tailor-shop reference fields, and Print Center reprint/settle flow (D-051-056) |
 | `a513690` | 2026-07-27 | Make the A4 button download a file instead of trying to open a tab |
 | `3c157ae` | 2026-07-27 | Fix Print Center: nav bar bleeding into every print, invalid @page, blocked A4 popup |

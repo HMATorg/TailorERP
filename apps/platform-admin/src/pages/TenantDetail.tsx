@@ -13,8 +13,11 @@ import {
   Typography,
   message,
 } from 'antd';
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { api, errMsg, useAuth } from '../api';
+
+/** Where apps/admin lives — the impersonation handoff link points here. */
+const ADMIN_APP_URL = import.meta.env.VITE_ADMIN_APP_URL ?? 'http://localhost:5173';
 
 interface OrgDetail {
   id: string;
@@ -26,21 +29,45 @@ interface OrgDetail {
   subscription: {
     status: string;
     currentPeriodEnd: string;
+    cancelAtPeriodEnd?: boolean;
     plan: { id: string; name: string; code: string; maxStores: number; maxUsers: number };
   } | null;
   stores: { id: string; name: string; status: string; isHeadquarters: boolean }[];
   _count: { users: number; customers: number; orders: number };
 }
 
+interface InvoiceRow {
+  id: string;
+  number: string | null;
+  status: string | null;
+  amountDue: number;
+  amountPaid: number;
+  currency: string;
+  created: string;
+  hostedInvoiceUrl: string | null;
+  invoicePdf: string | null;
+}
+
+const invoiceStatusColors: Record<string, string> = {
+  paid: 'green',
+  open: 'blue',
+  draft: 'default',
+  uncollectible: 'red',
+  void: 'default',
+};
+
 export default function TenantDetail() {
   const { id } = useParams();
   const { user } = useAuth();
   const [org, setOrg] = useState<OrgDetail | null>(null);
   const [plans, setPlans] = useState<{ id: string; code: string; name: string }[]>([]);
+  const [invoices, setInvoices] = useState<InvoiceRow[] | null>(null);
   const [planOpen, setPlanOpen] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [portalLoading, setPortalLoading] = useState(false);
+  const [impersonationUrl, setImpersonationUrl] = useState<string | null>(null);
   const canImpersonate = ['super_admin', 'support'].includes(user?.adminLevel ?? '');
+  const canBill = ['super_admin', 'billing'].includes(user?.adminLevel ?? '');
   const isSuperAdmin = user?.adminLevel === 'super_admin';
 
   const load = useCallback(async () => {
@@ -55,7 +82,14 @@ export default function TenantDetail() {
   useEffect(() => {
     void load();
     api.get('/admin/plans').then(({ data }) => setPlans(data)).catch(() => undefined);
-  }, [load]);
+    if (canBill) {
+      api
+        .get(`/admin/billing/organizations/${id}/invoices`)
+        .then(({ data }) => setInvoices(data))
+        .catch((e) => message.error(errMsg(e)));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [load, id]);
 
   if (!org) return <Card loading />;
 
@@ -85,16 +119,13 @@ export default function TenantDetail() {
   const impersonate = async () => {
     try {
       const { data } = await api.post(`/admin/organizations/${org.id}/impersonate`);
-      Modal.info({
-        title: 'Impersonation token issued (30 min, fully audited)',
-        content: (
-          <Typography.Paragraph copyable={{ text: data.accessToken }} style={{ wordBreak: 'break-all' }}>
-            Paste this token into the tenant admin app's session storage, or use it as a Bearer
-            token for API calls. All actions are logged under your identity.
-          </Typography.Paragraph>
-        ),
-        width: 520,
-      });
+      // Deliberately does NOT auto-open a tab here — a synthetic click after
+      // this await has already lost the click's user-activation window, and
+      // this exact family of bug took three rounds to fix elsewhere in this
+      // product (D-047/D-049/D-050). Rendering a real <a> the operator
+      // clicks themselves is a genuine second gesture, so no popup blocker
+      // has anything to object to.
+      setImpersonationUrl(`${ADMIN_APP_URL}/impersonate?token=${encodeURIComponent(data.accessToken)}`);
     } catch (e) {
       message.error(errMsg(e));
     }
@@ -108,6 +139,9 @@ export default function TenantDetail() {
           <Tag color={org.status === 'active' ? 'green' : 'red'}>{org.status}</Tag>
         </Typography.Title>
         <Space wrap>
+          <Link to={`/audit?org=${org.id}`}>
+            <Button>View audit trail</Button>
+          </Link>
           {canImpersonate && (
             <Popconfirm
               title="Impersonate this tenant's HQ Admin for 30 minutes? All actions are logged."
@@ -142,17 +176,19 @@ export default function TenantDetail() {
         title="Subscription"
         size="small"
         extra={
-          <Space>
-            <Button size="small" onClick={() => setCheckoutOpen(true)}>
-              Start paid subscription
-            </Button>
-            <Button size="small" onClick={() => void openPortal()} loading={portalLoading}>
-              Billing portal
-            </Button>
-            <Button size="small" type="primary" onClick={() => setPlanOpen(true)}>
-              Change plan
-            </Button>
-          </Space>
+          canBill && (
+            <Space>
+              <Button size="small" onClick={() => setCheckoutOpen(true)}>
+                Start paid subscription
+              </Button>
+              <Button size="small" onClick={() => void openPortal()} loading={portalLoading}>
+                Billing portal
+              </Button>
+              <Button size="small" type="primary" onClick={() => setPlanOpen(true)}>
+                Change plan
+              </Button>
+            </Space>
+          )
         }
       >
         {org.subscription ? (
@@ -165,6 +201,11 @@ export default function TenantDetail() {
             </Descriptions.Item>
             <Descriptions.Item label="Period ends">
               {org.subscription.currentPeriodEnd.slice(0, 10)}
+              {org.subscription.cancelAtPeriodEnd && (
+                <Tag color="red" style={{ marginInlineStart: 8 }}>
+                  cancels at period end
+                </Tag>
+              )}
             </Descriptions.Item>
             <Descriptions.Item label="Store limit">{org.subscription.plan.maxStores}</Descriptions.Item>
             <Descriptions.Item label="User limit">{org.subscription.plan.maxUsers}</Descriptions.Item>
@@ -173,6 +214,45 @@ export default function TenantDetail() {
           <Typography.Text type="secondary">No subscription</Typography.Text>
         )}
       </Card>
+
+      {canBill && (
+        <Card title="Invoices" size="small">
+          {invoices && invoices.length > 0 ? (
+            <Table
+              rowKey="id"
+              size="small"
+              pagination={false}
+              dataSource={invoices}
+              columns={[
+                { title: 'Number', render: (_, r) => r.number ?? r.id },
+                {
+                  title: 'Status',
+                  render: (_, r) =>
+                    r.status ? <Tag color={invoiceStatusColors[r.status] ?? 'default'}>{r.status}</Tag> : '—',
+                },
+                {
+                  title: 'Amount paid',
+                  render: (_, r) => `${(r.amountPaid / 100).toFixed(2)} ${r.currency.toUpperCase()}`,
+                },
+                { title: 'Date', dataIndex: 'created', render: (v: string) => v.slice(0, 10) },
+                {
+                  title: '',
+                  render: (_, r) =>
+                    r.hostedInvoiceUrl && (
+                      <a href={r.hostedInvoiceUrl} target="_blank" rel="noopener noreferrer">
+                        View
+                      </a>
+                    ),
+                },
+              ]}
+            />
+          ) : (
+            <Typography.Text type="secondary">
+              {invoices ? 'No invoices yet' : 'Loading…'}
+            </Typography.Text>
+          )}
+        </Card>
+      )}
 
       <Card title="Stores" size="small">
         <Table
@@ -230,6 +310,29 @@ export default function TenantDetail() {
             Create checkout link
           </Button>
         </Form>
+      </Modal>
+
+      <Modal
+        open={!!impersonationUrl}
+        title="Impersonation session ready (30 min, fully audited)"
+        onCancel={() => setImpersonationUrl(null)}
+        footer={null}
+        destroyOnHidden
+      >
+        <Typography.Paragraph type="secondary">
+          Opens {org.name}'s HQ Admin account in the tenant admin app. All actions taken during
+          this session are logged under your identity.
+        </Typography.Paragraph>
+        <Button
+          type="primary"
+          block
+          href={impersonationUrl ?? undefined}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={() => setImpersonationUrl(null)}
+        >
+          Open impersonated session
+        </Button>
       </Modal>
 
       <Modal open={planOpen} title="Change plan" onCancel={() => setPlanOpen(false)} footer={null} destroyOnHidden>

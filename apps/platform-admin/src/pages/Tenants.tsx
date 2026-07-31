@@ -35,6 +35,7 @@ export default function Tenants() {
   const [rows, setRows] = useState<OrgRow[]>([]);
   const [plans, setPlans] = useState<{ code: string; name: string }[]>([]);
   const [search, setSearch] = useState('');
+  const [status, setStatus] = useState<string | undefined>(undefined);
   const [createOpen, setCreateOpen] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -42,7 +43,7 @@ export default function Tenants() {
     setLoading(true);
     try {
       const { data } = await api.get('/admin/organizations', {
-        params: { search: search || undefined },
+        params: { search: search || undefined, status },
       });
       setRows(data);
     } catch (e) {
@@ -50,7 +51,7 @@ export default function Tenants() {
     } finally {
       setLoading(false);
     }
-  }, [search]);
+  }, [search, status]);
 
   useEffect(() => {
     void load();
@@ -60,12 +61,25 @@ export default function Tenants() {
   return (
     <Space direction="vertical" size="middle" style={{ width: '100%' }}>
       <Space style={{ width: '100%', justifyContent: 'space-between' }} wrap>
-        <Input.Search
-          placeholder="Organisation name…"
-          allowClear
-          onSearch={setSearch}
-          style={{ width: 280 }}
-        />
+        <Space wrap>
+          <Input.Search
+            placeholder="Organisation name…"
+            allowClear
+            onSearch={setSearch}
+            style={{ width: 280 }}
+          />
+          <Select
+            placeholder="Status"
+            allowClear
+            style={{ width: 140 }}
+            value={status}
+            onChange={setStatus}
+            options={[
+              { value: 'active', label: 'Active' },
+              { value: 'suspended', label: 'Suspended' },
+            ]}
+          />
+        </Space>
         <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
           New Organisation
         </Button>

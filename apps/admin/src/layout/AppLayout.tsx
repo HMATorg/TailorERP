@@ -6,13 +6,14 @@ import {
   DashboardOutlined,
   InboxOutlined,
   LogoutOutlined,
+  SafetyCertificateOutlined,
   ShopOutlined,
   ShoppingOutlined,
   TeamOutlined,
   UserOutlined,
   WarningOutlined,
 } from '@ant-design/icons';
-import { Avatar, Dropdown, Layout, Menu, Space, Typography } from 'antd';
+import { Alert, Avatar, Dropdown, Layout, Menu, Space, Typography } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { Link, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import LanguageSwitcher from '../components/LanguageSwitcher';
@@ -22,7 +23,7 @@ import { useAuthStore } from '../stores/auth';
 const { Header, Sider, Content } = Layout;
 
 export default function AppLayout() {
-  const { user, accessToken, logout } = useAuthStore();
+  const { user, accessToken, isImpersonating, logout } = useAuthStore();
   const { t } = useTranslation();
   const location = useLocation();
   const navigate = useNavigate();
@@ -40,6 +41,11 @@ export default function AppLayout() {
         ? [
             { key: '/team', icon: <TeamOutlined />, label: <Link to="/team">{t('nav.team')}</Link> },
             { key: '/stores', icon: <ShopOutlined />, label: <Link to="/stores">{t('nav.stores')}</Link> },
+            {
+              key: '/settings',
+              icon: <SafetyCertificateOutlined />,
+              label: <Link to="/settings">{t('nav.settings')}</Link>,
+            },
           ]
         : []),
     ],
@@ -112,6 +118,31 @@ export default function AppLayout() {
           </Space>
         </Header>
         <Content style={{ padding: 24 }}>
+          {isImpersonating && (
+            <Alert
+              type="warning"
+              showIcon
+              banner
+              closable={false}
+              style={{ marginBlockEnd: 16 }}
+              message={
+                <Space>
+                  <span>
+                    You are viewing <strong>{user?.organization.name}</strong> as Tailonix platform
+                    support. This session ends automatically and cannot be renewed.
+                  </span>
+                  <a
+                    onClick={() => {
+                      logout();
+                      navigate('/login');
+                    }}
+                  >
+                    End impersonation
+                  </a>
+                </Space>
+              }
+            />
+          )}
           <Outlet />
         </Content>
       </Layout>

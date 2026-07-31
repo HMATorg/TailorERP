@@ -117,8 +117,12 @@ export class InventoryController {
 
   @Get('alerts')
   @RequirePermissions('view_inventory')
-  listAlerts(@CurrentStoreId() storeId: string, @Query('status') status?: string) {
-    return this.alerts.listAlerts(storeId, status);
+  listAlerts(
+    @CurrentUser() principal: AccessTokenPayload,
+    @CurrentStoreId() storeId: string,
+    @Query('status') status?: string,
+  ) {
+    return this.alerts.listAlerts(principal.orgId!, storeId, status);
   }
 
   @Put('alerts/:id')

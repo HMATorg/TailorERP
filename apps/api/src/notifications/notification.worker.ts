@@ -8,6 +8,7 @@ import { ConfigService } from '@nestjs/config';
 import { Job, Worker } from 'bullmq';
 import { InvoicesService } from '../invoices/invoices.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { FeatureGateService } from '../platform/feature-gate.service';
 import { PushService } from './push.service';
 import { QUEUE_NAMES, type NotificationJob, type OrderStatusChangedJob } from './queues';
 import { WhatsappService } from './whatsapp.service';
@@ -54,6 +55,7 @@ export class NotificationWorker implements OnModuleInit, OnModuleDestroy {
     private readonly whatsapp: WhatsappService,
     private readonly push: PushService,
     private readonly invoices: InvoicesService,
+    private readonly featureGate: FeatureGateService,
   ) {}
 
   onModuleInit() {
@@ -108,6 +110,13 @@ export class NotificationWorker implements OnModuleInit, OnModuleDestroy {
       );
       return;
     }
+    const features = await this.featureGate.getFeatures(data.organizationId);
+    if (!features.includes('whatsapp')) {
+      this.logger.log(
+        `Invoice ${invoice.invoiceNumber} generated; org's plan does not include WhatsApp — not sent`,
+      );
+      return;
+    }
 
     const { buffer, filename } = await this.invoices.renderPdf(
       data.organizationId,
@@ -150,8 +159,12 @@ export class NotificationWorker implements OnModuleInit, OnModuleDestroy {
     });
     const storeName = store?.name ?? 'our store';
 
-    // Primary channel: WhatsApp, when the customer has opted in (PRD §4.4)
-    if (customer.whatsappConsent) {
+    // Primary channel: WhatsApp, when the customer has opted in AND the
+    // org's plan includes it (D-060) — a plan without 'whatsapp' falls
+    // through to push exactly like a WhatsApp API failure already does,
+    // rather than silently sending on an unpaid-for channel.
+    const features = await this.featureGate.getFeatures(data.organizationId);
+    if (customer.whatsappConsent && features.includes('whatsapp')) {
       try {
         await this.whatsapp.sendTemplate({
           organizationId: data.organizationId,

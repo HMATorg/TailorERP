@@ -6,6 +6,7 @@ import {
 import { Prisma } from '@prisma/client';
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { FeatureGateService } from '../platform/feature-gate.service';
 import type { AdjustBatchDto, CreateBatchDto, TransferDto } from './dto/inventory.dto';
 
 @Injectable()
@@ -13,6 +14,7 @@ export class InventoryService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly featureGate: FeatureGateService,
   ) {}
 
   /** Log a fabric purchase: creates the batch and its purchase_in movement (I-1). */
@@ -181,6 +183,7 @@ export class InventoryService {
    * transfer_in at destination (merging into an existing same-code batch if present).
    */
   async transfer(orgId: string, userId: string, dto: TransferDto, ip?: string) {
+    await this.featureGate.assertFeature(orgId, 'transfers');
     const quantity = new Prisma.Decimal(dto.quantity);
 
     const result = await this.prisma.$transaction(async (tx) => {

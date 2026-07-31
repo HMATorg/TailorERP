@@ -6,6 +6,7 @@ import Appointments from './pages/Appointments';
 import BatchDetail from './pages/BatchDetail';
 import Customers from './pages/Customers';
 import Dashboard from './pages/Dashboard';
+import Impersonate from './pages/Impersonate';
 import Inventory from './pages/Inventory';
 import Login from './pages/Login';
 import NewOrder from './pages/NewOrder';
@@ -21,6 +22,7 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/accept-invite" element={<AcceptInvite />} />
+        <Route path="/impersonate" element={<Impersonate />} />
         <Route element={<AppLayout />}>
           <Route path="/" element={<Dashboard />} />
           <Route path="/orders" element={<Orders />} />

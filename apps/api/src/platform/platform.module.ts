@@ -1,13 +1,12 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
-import { FeatureGateService } from './feature-gate.service';
+import { FeatureGateModule } from './feature-gate.module';
 import { PlatformController } from './platform.controller';
 import { PlatformService } from './platform.service';
 
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, FeatureGateModule],
   controllers: [PlatformController],
-  providers: [PlatformService, FeatureGateService],
-  exports: [FeatureGateService],
+  providers: [PlatformService],
 })
 export class PlatformModule {}

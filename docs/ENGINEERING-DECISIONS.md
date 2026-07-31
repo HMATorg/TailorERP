@@ -754,3 +754,546 @@ as filed when it was not.
   second real-environment success and was still wrong for the same underlying reason. What
   actually closed it was changing the mechanism to one with no popup-blocker exposure at all,
   not accumulating more single successful observations of one that had some.
+
+## D-051: Counter can find, reprint, and settle a past order — and a full settlement closes it
+
+- **The gap:** once a customer left the counter, their order was unreachable. `Receipt.tsx` only
+  ever read from React Router's in-memory navigation `state`, which a page refresh or a second
+  visit doesn't have — the page's own dead-end message said "reopen this order from the order
+  list to reprint," but no such list existed anywhere in the POS app. A customer coming back to
+  pay a balance or re-collect a lost thermal receipt had nowhere to be served from, even though
+  `GET /orders` and `GET /orders/:id` were already fully permissioned for `cashier` via
+  `view_orders` — this was a missing page, not a missing capability.
+- **Decision: reuse the existing generic Orders API rather than build POS-specific duplicates.**
+  New `Orders.tsx` (search by order #/customer name/phone, status filter) and `OrderDetail.tsx`
+  (status timeline, items, payments, settlement, reprint) call `GET /orders` and `GET /orders/:id`
+  directly. `orders.service.ts getById()` was missing the `invoice` and `tickets` relations
+  needed to power a reprint — added them (tickets flattened to carry `garmentType` off the
+  nested `orderItem`, matching the shape `pos.service.ts checkout()` already returns) so one
+  call gives a reopened order everything Print Center needs, the same as a fresh checkout.
+- **The print output itself is shared, not re-implemented.** The thermal-receipt/garment-tag
+  markup and the Print Center button row (including the D-050 forced-download A4 button) were
+  extracted from `Receipt.tsx` into `components/PrintCenter.tsx`, taking a normalized data shape
+  instead of a page-specific one. `Receipt.tsx` (fresh checkout, reading `location.state`) and
+  `OrderDetail.tsx` (reopened from history, reading the API response) each build that shape from
+  their own source and hand it to the same component. The alternative — a second reprint view
+  with its own copy of the print markup — would have reintroduced exactly the class of bug D-049
+  took three rounds to fix, just in a second place that could silently drift from the first.
+- **Settling the balance also closes the order, but only when production actually finished.**
+  The user confirmed the cashier who collects the final payment should be able to mark the order
+  delivered themselves, without a separate manager trip through Workshop. `pos.service.ts
+  settle()` already computed `closesOrder` (balance reaches zero); it now also checks
+  `canTransition(order.status, 'delivered')` from `@tailonix/shared` — true only when the order
+  is at `ready`, since that's the only state the order-lifecycle state machine allows to advance
+  to `delivered`. If both hold, the same transaction sets `status: 'delivered'`, `deliveredAt`,
+  and an `orderStatusHistory` row, and `OrderEventsPublisher.publishStatusChanged` fires the same
+  WhatsApp delivery notification a manager's manual status change would.
+- **Payment is never blocked on a workflow technicality.** If a customer pays off the full
+  balance before Workshop has marked the order `ready` — an operational error, but not the
+  cashier's to solve at the till — `settle()` still records the payment and releases the deposit
+  liability exactly as before; it just doesn't auto-transition. The response carries
+  `markedDelivered: false` and the order's actual `status`, and `OrderDetail.tsx` renders a
+  warning banner ("balance is fully paid but the workshop has not marked this order ready") so
+  the handover happens deliberately rather than being silently skipped or silently forced. No new
+  RBAC permission was added — this reuses the `pos_settle` permission cashier already has, kept
+  deliberately narrow to "close out what you just got paid for," not general order-status control.
+- **Verification:** `apps/api/test/pos.e2e-spec.ts` covers both branches — settling an order
+  still at `pending` records the payment without touching status; settling one seeded at `ready`
+  transitions it to `delivered`, sets `deliveredAt`, and writes the status-history row — plus a
+  reprint check that `GET /orders/:id` on a checked-out order returns the same invoice and ticket
+  data the checkout response did.
+
+## D-052: Measurement, yield, and fabric-roll selection were silently hardcoded to Thobe
+
+- **The bug:** `Counter.tsx` let a cashier pick Bisht/Shirt/Trousers from a per-garment Type
+  dropdown, but every consumer of that choice ignored it — `activeThobeProfile` always looked up
+  the `Thobe` measurement row, `saveMeasurements()` always wrote `garmentType: 'Thobe'`, and the
+  yield-preview call always requested `garmentType: 'Thobe'`. Selecting anything else had zero
+  effect: the garment was measured, yield-calculated, and cut against whatever Thobe profile
+  happened to be on file, with no error or warning. This was purely a front-end binding bug —
+  `Measurement`, `previewYield`, and the checkout DTO were already keyed by `garmentType`
+  server-side; nothing in the API needed to change.
+- **Decision: the Measurements panel edits whichever garment tab is active, and yield/fabric
+  lookups run per distinct garment type in the cart, not once globally.** `activeGarmentType`
+  now derives from `garments[activeTab].garmentType`; a `useEffect` keyed on
+  `[activeGarmentType, lookup]` repopulates the measurement form from that type's saved profile
+  (or empty, if none exists yet) every time the active tab or its type changes. `yieldByType`/
+  `rollsByType` replace the single global `yieldPer`/`rolls`, computed by grouping the cart's
+  garments by type and calling the yield/sellable-roll endpoints once per distinct type — a
+  Thobe and a Shirt in the same order can now need, and get offered, different fabric.
+- **A tab whose type has no saved profile no longer hides the entire Garments card.** The old
+  gate (`!activeThobeProfile → <Empty>`) assumed one profile covered everything. It's now
+  per-tab: an `Alert` inside that tab's body says a profile is missing and the fabric-roll select
+  is disabled, while other tabs whose types do have a profile stay fully usable. The Measurements
+  card's title and "active vN" tag also now say which type they're showing, since it's no longer
+  always Thobe.
+- **`MeasurementDiagram`'s SVG is still visually a thobe silhouette.** The M1–M8 point set it
+  labels (total length, shoulder width, sleeve length, chest, hip, neck, wrist, hem) is the one
+  shared numeric schema every garment type's `Measurement` row uses — the bug was in which row
+  got read and written, not in the fields themselves — so redrawing per-type artwork was out of
+  scope for this fix.
+
+## D-053: Checkout now sends the discount, due date, notes, and deposit-method fields the DTO already accepted
+
+- `PosCheckoutDto` has always declared `discountAmount`, `dueDate`, `notes`, and a
+  `depositMethod` enum, and `pos.service.ts checkout()` already applied all four — `Counter.tsx`
+  simply never collected or sent them, and hardcoded `depositMethod: 'card'` regardless of what
+  the cashier actually took. Added the corresponding fields (discount input, due-date picker,
+  notes textarea, deposit-method select) to the checkout panel and wired them into the POST body.
+  All four stay optional and are excluded from `readyToCheckout`'s gating, matching the DTO.
+- The on-screen running total now subtracts the discount before display (`total = grossTotal -
+  discount`), and the deposit input's max/50%-quick-fill are based on that discounted total —
+  otherwise a cashier could enter a deposit larger than what the order will actually total after
+  the discount is applied server-side.
+
+## D-054: Trousers gets its own measurement matrix, diagram and yield formula — not Thobe's, relabeled
+
+- **What the user flagged:** D-052 fixed *which* profile a garment tab reads/writes, but every
+  garment type still shared the exact same eight fields and the same thobe-shaped diagram. The
+  user pointed out that "there should be [a] complete [set of] measurements for all the Types" —
+  correctly, since the M1-M8 columns are not generic slots: `m8SkirtPerimeter`/الذيل is literally
+  a thobe's hem, and the fabric-yield formula (`2×TotalLength + SleeveLength + 0.20m hem`) is
+  Thobe's own cutting geometry from the blueprint. Trousers in particular has no sleeve, no neck,
+  and is cut as two leg panels, not one doubled body panel — none of the eight points or the
+  formula's shape apply to it at all.
+- **Two decisions were the user's, not mine, because getting them wrong means wrong fabric-stock
+  deductions, not just a mislabeled field:**
+  1. **Trousers gets dedicated schema columns** (`t1Waist`…`t7AnkleOpening`, migration
+     `20260727102924_add_trouser_measurement_points`) rather than relabeling the M-columns —
+     chosen over reuse because forcing e.g. inseam into a column named `m8SkirtPerimeter` would
+     leave the schema self-contradictory for anyone reading it directly (a DBA, a future
+     migration, a report). Thobe/Bisht/Shirt keep sharing M1-M8: all three are genuinely
+     "long garment, body + sleeve + neck + hem" shapes where the same eight measurement
+     *concepts* apply, just with different typical values.
+  2. **Bisht/Shirt/Trousers yield formulas are explicit, flagged approximations**, not real
+     shop figures — none were available. `yield.service.ts` generalises the Thobe formula into
+     `calculateRobe({lengthMultiplier, hemAllowanceM})`, defaulting to Thobe's exact numbers so
+     `calculate()` (and every existing test asserting its output) is byte-identical to before.
+     Bisht reuses the ×2 multiplier with a larger hem allowance (0.35m — fuller/looser cut than a
+     Thobe); Shirt drops to ×1 (a shorter body panel, not doubled floor-length fabric) with a
+     smaller allowance (0.15m). Trousers gets its own `calculateTrousers()` entirely
+     (`2×Outseam + 0.25m`, no sleeve term at all) since the robe formula's shape doesn't apply —
+     and since this system has no fabric-width model, thigh/hip fullness is folded into one flat
+     allowance rather than faked with a spuriously precise conversion. Every constant carries a
+     one-line comment saying it is a placeholder pending real figures; nothing here should be
+     read as validated shop data.
+- **The "one read model" discipline (D-044) extends cleanly to a second garment family.**
+  `packages/shared/src/measurements.ts` gained `TROUSER_POINT_KEYS` and a `garmentFamily()`
+  helper; every consumer (the API's `MEASUREMENT_SELECT`/`pointsForGarmentType()`, the workshop's
+  `forTicket()`, Counter's measurement panel and diagram, Admin's `CustomerDetailDrawer`) reads
+  through it rather than re-deriving which points apply. One consequence worth calling out: the
+  customer PWA's `Measurements.tsx` needed **zero code changes**. It already fetches the point
+  list from `GET /customer/measurements/points` and renders only whichever keys a given snapshot
+  actually carries (`filled()`), so widening that endpoint to return both families' points was
+  sufficient — a Trousers snapshot shows its T-points and a robe snapshot shows its M-points, with
+  the existing sparse-rendering logic doing the type-dispatch implicitly. That this fell out for
+  free is a direct payoff of the read-model discipline the codebase already had, not new work.
+- **`MeasurementDiagram.tsx` gets a real trousers silhouette** (waistband splitting into two
+  legs, hotspots for waist/hip/inseam/thigh/knee/ankle), not the thobe outline with different
+  labels — the user's original complaint was exactly that a visibly wrong diagram undermines
+  "professional certified tailor shop" credibility as much as a wrong field does.
+- **Verification:** `yield.service.spec.ts` covers `calculateRobe`'s Thobe-default-equivalence
+  and its Shirt-multiplier case, and `calculateTrousers`'s formula and required-field guard.
+  `pos.e2e-spec.ts` adds a full Trousers checkout (own measurement profile, `POST /pos/orders`,
+  ticket carries `garmentType: 'Trousers'`, reserved fabric matches `2×1.05 + 0.25 = 2.35m`
+  exactly) alongside the existing Thobe coverage. Live-verified in the browser: took Trousers
+  measurements in Counter against the new diagram, confirmed the per-tab "no profile yet" gate
+  and required-field messaging said T4 rather than M1/M3, completed a Trousers checkout end to
+  end, and confirmed Admin's `CustomerDetailDrawer` renders the T-column table for that
+  customer's Trousers history instead of eight blank M-columns.
+
+## D-055: Five more Thobe measurement points, a cut-style/cufflink spec, and an urgent flag — read off a real tailor shop's own paper order form
+
+- **Source:** the user supplied a photo of an actual tailor shop's physical order slip (Arabic,
+  with a "J"/`0101` reference and "Brofan"/"Thob No." fields), annotated with English labels for
+  each field. It is the closest thing this project has to ground truth for what a professional
+  shop actually captures, and it captures more than the blueprint's M1-M8 did.
+- **What was added, and what was deliberately not guessed at:**
+  - Five new robe-family points, `m9Waist` through `m13HalfChest` (Waist, Round Shoulder, Mid of
+    Hand, Plate Length, Half Chest) — migration `20260729075052_add_tailor_shop_reference_fields`.
+    These are pure capture fields: the yield formula only ever needed M1/M3, so adding points
+    that aren't fed into any calculation carries no correctness risk, only more precise intake.
+    `m5HipWidth` is relabeled "Hip" (from "Waist / Hip") now that `m9Waist` is the dedicated
+    waist point; the DB column itself is untouched, so historical rows keep whatever a cashier
+    actually meant by the old combined field — there's no way to retroactively know which.
+  - `CutStyle` enum (`saudi | kuwaiti | qatari | other`) and a free-text `cufflinkSize` (e.g.
+    `"9x3"`) on `OrderItem` — a garment-construction spec, not a body measurement, so it lives
+    with `collarStyle`/`cuffStyle` rather than in the `Measurement` matrix.
+  - `isUrgent` on `Order` ("مستعجل" on the form) — surfaced as a checkbox at checkout, a red
+    button/tag on Receipt, and an `URGENT` tag in both POS's and Admin's Orders list/detail, so a
+    rush order is visible at every point someone might act on it, not just where it was flagged.
+  - **Deliberately not touched: `CollarStyle`/`CuffStyle`/`PocketStyle`/`StitchingStyle`.** The
+    form shows roughly 13 collar/placket icons and 8 pocket icons against our 4/2/3/3 — a real
+    gap — but the icons' Arabic labels were too small to read reliably from the photo. Inventing
+    plausible-sounding English names for garment-construction styles I can't actually confirm is
+    exactly the failure mode this reference material was meant to prevent: confidently wrong data
+    entry options are worse than an acknowledged gap. Left open pending a clearer source (a closer
+    crop of that row, or a dictated list) rather than guessed.
+- **Verification:** `measurements.service.spec.ts` and `yield.service.spec.ts` pass unchanged
+  (new points are additive to `MEASUREMENT_SELECT`/the labeled point arrays, not a formula
+  input). Live-verified in the browser: M9-M13 hotspots render and are enterable on the Thobe
+  diagram, a cut-style + cufflink size set on a garment round-trips through checkout, the urgent
+  checkbox produces the `URGENT` tag on Receipt, Orders (POS and Admin), and Order detail, and
+  Admin's `CustomerDetailDrawer` measurement history table shows all thirteen M-columns.
+
+## D-056: The measurement diagram moved every hotspot off the garment into labelled columns
+
+- **What the user found:** with all 13 robe points now live, several hotspots — M2, M4, M9,
+  M10, M12, M13 — sat within a ~100×100px cluster near the chest, close enough that the circles
+  nearly touched. Visually indistinguishable points defeat the diagram's whole purpose: a
+  cashier can't tell "click here for Waist" from "click here for Half Chest" when the two dots
+  are 10px apart. The user asked for every point to have its own clear graphic, not just enough
+  space to not overlap.
+- **Decision:** stopped placing hotspots on the garment outline at all. Each of the 13 (7)
+  points now sits in a fixed left- or right-margin column, evenly spaced top to bottom by
+  construction (`HotspotLayout` gives each an explicit `x`/`y` for the clickable label and a
+  separate `targetX`/`targetY` for where it's actually measured on the body), connected by a
+  thin dashed leader line — the same convention a tailor's flat-sketch spec sheet uses to
+  annotate a garment without crowding the drawing itself. Collision by construction is
+  impossible: the columns are just a list, not a shared coordinate space.
+- **"Semantic," not just "spaced out":** five robe points (shoulder width, chest, waist, hip,
+  hem) and five trouser points (waist, hip, thigh, knee, ankle) are genuine circumference/width
+  measurements, so each gets an actual amber dimension-line arrow drawn across the body at that
+  height, with tick-mark ends — the graphic now shows *what kind* of measurement it is, not just
+  *where*. Total length (robe) and outseam/inseam (trousers) get the same treatment as vertical
+  dimension lines along the body instead of a bare dot. The garment fill also picked up a subtle
+  gradient for a less flat, more finished look, matching the "more attractive" ask directly.
+  Canvas grew from 200×350 to 320×400 to give the margin columns room without shrinking the
+  garment itself.
+- **Unchanged:** the click-to-focus/highlight behaviour and the cm/in toggle (both D-051-era
+  additions) needed no changes — they operate on the label position, which still exists, just
+  relocated. Verified live for both the robe (all 13 points, including a value already on file
+  from earlier testing) and trousers (all 7) diagrams: clicking a hotspot still scrolls to and
+  focuses its field correctly with the new layout.
+
+## D-057: ZATCA Phase 2 — real XAdES signing, CSR generation, and the Reporting/Clearance client
+
+- **Source:** the user supplied the full "E-invoicing Detailed Technical Guidelines Version 2"
+  (ZATCA/FATOORA, Nov 2022) and asked for implementation against it. D-029 had already scoped the
+  gap between "cryptographic stamp" (needs a real CSID — client action, not code) and everything
+  upstream of it (buildable and independently testable with self-signed fixtures). Given
+  `AskUserQuestion`, the user chose to build everything in the latter category now, all gated
+  behind config exactly like the existing `zatca_not_onboarded` stub, so nothing calls the real
+  ZATCA API until real credentials exist.
+- **`canonicalize()` now runs real C14N** (`xml-crypto`'s `C14nCanonicalization`, replacing a
+  placeholder) via `@xmldom/xmldom`. The guideline specifies C14N **1.1**; `xml-crypto` implements
+  **1.0**. The two are byte-identical for any XML that never uses `xml:base`/`xml:id`/`xml:lang` —
+  true of every invoice this system generates — so the divergence is a documented non-issue, not
+  an unverified assumption.
+- **Full 6-step XAdES-BES pipeline** (`zatca-sign.ts`, per guideline §5): sign the canonicalized
+  invoice with ECDSA-SHA256 → build `SignedProperties` (cert digest, signing time, issuer, serial)
+  → hash *that* canonicalized → assemble `UBLExtensions` with two `ds:Reference` entries (invoice
+  digest, SignedProperties digest) → splice as the first child of `<Invoice>` (UBL 2.1 ordering
+  requires it before `ProfileID`) → splice a QR `AdditionalDocumentReference`.
+  `zatca-cert.ts` extracts the facts the pipeline needs from a PEM certificate (issuer DN reversed
+  to RFC4514 order, serial converted hex→decimal since XAdES wants decimal, and the CA's own
+  signature over the CSID pulled via `asn1js` from `Certificate ::= SEQUENCE`'s third element,
+  since no Node API exposes it — needed for QR tag 9 on simplified invoices only).
+- **Guideline §5 Step 2 is ambiguous** ("sign the generated invoice hash... not encode" reads as
+  either "ECDSA-sign the canonical XML" or "double-hash a pre-computed digest"). Implemented the
+  standard XML-DSig interpretation — sign the canonical content directly — and documented the
+  alternative in `zatca-sign.ts`'s module comment rather than silently picking one.
+- **Node's WebCrypto rejects secp256k1** (`Unrecognized namedCurve`), which is the curve ZATCA's
+  own guideline uses in its Appendix example. This ruled out `pkijs`'s built-in `.sign()`
+  (WebCrypto-bound) for both the XAdES signature and the CSR. Fixed by hybridizing: `pkijs`/
+  `asn1js` build the ASN.1 structure (TBS bytes via its normally-`protected` `encodeTBS()`, called
+  through a type-cast — a compile-time-only restriction, not a runtime one), and Node's classic
+  `crypto.sign`/`crypto.verify` do the actual cryptographic operation, which does support the
+  curve via OpenSSL bindings. Verified independently of the app's own tests: a generated CSR
+  round-tripped through real `openssl req -verify -noout` → "Certificate request self-signature
+  verify OK".
+- **`zatca-csr.ts`'s exact OID/attribute placement is explicitly unverified** — the guideline
+  defers the CSR template to "the EGS vendor's manual," which this document doesn't include.
+  Implemented from memory of common ZATCA reference implementations; the *shape* (valid PKCS#10,
+  correct curve, all eight required fields present) is proven by the OpenSSL round-trip above, but
+  the OID assignments should be checked against ZATCA's actual SDK/`.cnf` before use against a
+  real Compliance API. Same "don't guess at unverifiable compliance data" discipline as D-055's
+  collar/pocket gap, applied here to something that blocks real invoice submission rather than
+  just intake precision.
+- **`zatca-api-client.ts`** wraps the Reporting (`/invoices/reporting/single`) and Clearance
+  (`/invoices/clearance/single`) calls behind `ZATCA_API_BASE`; unset, every call returns
+  `not_configured` rather than throwing, matching the existing `submit()` contract. Response
+  parsing follows ZATCA's real Core API JSON shape (`validationResults.status` of PASS/WARNING/
+  ERROR) from general knowledge, not from a schema printed in this guideline — flagged for the
+  same reason the CSR OIDs are: confirm against a live response before trusting it exactly.
+- **A real bug this surfaced and fixed before it shipped:** archiving the *signed* XML (instead of
+  the plain canonical form, needed once signing exists) broke `verifyChain()`'s re-hash check,
+  since the signed form carries extra content the original `invoiceHash` was never computed over —
+  every signed invoice would have silently reported as tampered. Fixed with `stripSignatureElements()`
+  (the inverse splice) plus re-canonicalizing before re-hashing. Caught by writing a genuine
+  round-trip test (sign → strip → canonicalize → hash → compare), not by trusting the pieces in
+  isolation; the first version of that test itself was wrong (asserted against the canonical form
+  when `stripSignatureElements()` actually restores the raw pre-canonicalization XML) and the
+  failure is what revealed the real bug's shape.
+- **Verification:** `zatca-sign.spec.ts` (9 tests) proves the signature verifies against the real
+  certificate's public key via `crypto.verify`, that tampering a single character breaks
+  verification, correct UBLExtensions ordering/content, the full 9-tag QR for simplified vs 8-tag
+  (no CA signature) for standard invoices, and the archival round-trip above. `zatca-csr.spec.ts`
+  (4 tests) proves a fresh key pair per call and independent OpenSSL verification. All existing
+  `src/zatca/` tests (38 total before this addition) still pass.
+- **`submit()` now actually calls Fatoora** instead of always returning the `zatca_not_onboarded`
+  stub: simplified invoices go through Reporting, standard through Clearance (guideline §3.1.2 —
+  the two invoice families use different endpoints, not a shared one branched on a flag). This
+  needed a field the schema didn't have: ZATCA's Basic Auth for these APIs is
+  `base64(certificate:secret)`, where the *secret* is a value returned once at CSID issuance and
+  distinct from both the certificate and the private key already stored. Added
+  `Organization.zatcaApiSecretEncrypted` (migration `20260729183118_add_zatca_api_secret`,
+  encrypted the same way as the other two) rather than reusing an existing field for something it
+  doesn't represent. The Basic-Auth *username* itself is derived from the stored certificate via
+  `readCertFacts().certificateDerBase64` on each call instead of being stored separately — it's
+  already fully recoverable from data that exists, so a second copy would just be one more thing
+  that could drift from the certificate it's supposed to match.
+- **The result is persisted, not just returned:** `Invoice.submissionStatus` moves to `reported`/
+  `cleared`/`failed` (the enum already had these; nothing used them yet) and `clearanceStatus`/
+  `zatcaResponse` capture ZATCA's own outcome and full response body for audit, mirroring exactly
+  the fields the compliance report and any future admin UI will need to read.
+- **Verified with a mocked `ZatcaApiClient` and `fetch`**, per the same instantiate-with-mocks
+  pattern already used by `invoices.service.spec.ts` (no Nest `TestingModule` elsewhere in this
+  module, so none was introduced here). `zatca-submit.spec.ts` covers all four early-exit reasons
+  (`zatca_not_onboarded` — missing config or missing org secret, `not_issued`, `archive_unavailable`),
+  confirms Reporting vs Clearance routing by invoice type, and confirms both the success and the
+  rejected-outcome paths persist the fields above correctly — using the *real* `encryptSecret`/
+  `decryptSecret` round-trip against the test certificate fixture rather than mocking the crypto
+  itself, so the Basic-Auth credentials asserted in the test are the actual bytes `submit()` would
+  send, not a stand-in for them.
+
+## D-058: ZATCA onboarding orchestration — three explicit steps, a permission that didn't exist, and one deliberate non-feature
+
+- **Continues D-057's scope** ("everything buildable now" against the pasted guideline):
+  `ZatcaOnboardingService` drives the Compliance CSID → compliance checks → Production CSID
+  sequence from guideline §3.3, gated the same way as everything ZATCA-shaped in this codebase —
+  inert without `ZATCA_API_BASE`, and requiring a human-obtained OTP from the real FATOORA portal
+  or Developer Portal at the first step, since generating that OTP is not something this system
+  (or Claude, per the standing safety rules around account/portal access) can do on the tenant's
+  behalf.
+- **Three separately-persisted steps, not one call.** A real onboarding session is naturally
+  interrupted — the OTP comes from a portal in another tab, compliance checks may need a retry,
+  and a store owner walking through a UI wizard (task after this one) needs each step to survive a
+  page reload. `Organization.zatcaEnvironment` (previously an unused column) now tracks the CSID's
+  own stage — `null` → `'compliance'` → `'production'` — and a new `zatcaComplianceRequestId`
+  column carries ZATCA's own request id from the compliance step into the production-CSID request
+  that needs it.
+- **`submit()` (D-057) now checks the stage, not just presence.** Before this, any CSID+secret pair
+  was enough to attempt real Reporting/Clearance. A compliance-stage CSID is a bootstrap credential
+  — valid only against the compliance-check endpoint — so `ZatcaService.submit()` gained
+  `org.zatcaEnvironment !== 'production'` as an explicit third gate. Missing this would have let an
+  org mid-onboarding accidentally attempt (and fail, or worse, half-succeed against) a real
+  Reporting/Clearance call with credentials ZATCA never intended for that purpose.
+- **The Production CSID reuses the Compliance CSID's key pair.** ZATCA issues a new certificate for
+  the CSR already on file rather than requiring a second CSR, so `requestProductionCsid` only
+  replaces the stored certificate and secret — the private key from step 1 carries through
+  unchanged. Getting this wrong (regenerating a key pair) would produce a production certificate
+  that doesn't match the tenant's own signing key.
+- **Compliance checks are deliberately partial, and say so in their own response.** ZATCA's real
+  compliance suite expects six sample documents — standard and simplified, each as an invoice,
+  credit note, and debit note. This codebase has never modeled credit or debit notes; inventing
+  fake ones just to submit six documents would either be rejected outright by ZATCA or, worse,
+  silently misrepresent what was actually checked. `runComplianceChecks()` submits the two document
+  types this system genuinely produces (one standard, one simplified tax invoice, built from
+  synthetic sample data — not a real tenant order, matching what a compliance check is for) and its
+  response literally says "does not yet model credit/debit notes" rather than claiming a six-check
+  pass that didn't happen. Extending this to the full six is real future work, not a rounding error.
+- **Revocation is local-only, on purpose.** Every other step in this file has *some* guideline
+  section describing its request/response shape, reconstructed from general ZATCA-API knowledge
+  with the same "unverified against a live response" caveat as the CSR OIDs (D-057). Revocation
+  does not — nothing in the material available to this session describes it step by step — and
+  guessing at a destructive remote call's contract is a categorically worse mistake than guessing at
+  a request one: a wrong local wipe is recoverable by re-onboarding, a wrong remote revocation call
+  is not verifiable as having done what was intended at all. `revokeLocally()` wipes the stored
+  CSID/key/secret and resets the stage to `not_started` — immediately stopping this system from
+  being able to sign or submit anything with a possibly-compromised credential — and says plainly
+  that revoking it on ZATCA's own side is a separate, human action on the real portal.
+- **New `manage_organization` permission, `hq_admin` only.** No existing permission in
+  `packages/shared/src/permissions.ts` correctly describes "change this tenant's ZATCA compliance
+  credentials" — the closest, `manage_stores`, is about store records, not tax/compliance identity.
+  Added as a new entry in `PERMISSIONS`; since `hq_admin`'s default list is the array itself (not an
+  enumerated subset, per D-043), the new permission reaches `hq_admin` automatically and no other
+  role's default list needed to change. `permissions.spec.ts`'s count assertion (already keyed off
+  `PERMISSIONS.length`, not a literal, since D-043) required no edit.
+- **Verification:** `zatca-onboarding.spec.ts` (8 tests) mocks `ZatcaApiClient.complianceRequest`
+  and uses the real `encryptSecret`/`decryptSecret` round-trip against the test certificate fixture
+  (same discipline as `zatca-submit.spec.ts`) to prove the actual bytes stored and later decrypted
+  match what a real onboarding call would carry — covering the compliance-CSID request, the
+  refuse-before-compliance-CSID and refuse-before-request-id guards, the two-document compliance
+  check, the production-CSID exchange (including the compliance-request-id round trip and key-pair
+  reuse), and full local revocation. `zatca-submit.spec.ts` gained a case for the compliance-stage
+  rejection specifically. `npx tsc --noEmit` clean across `apps/api`; full `src/zatca` + `src/auth`
+  suites (80 tests) pass together.
+- **Admin SPA gets a minimal onboarding page** (`apps/admin/src/pages/Settings.tsx`, route
+  `/settings`, nav item gated by the same `isHq` boolean `Team`/`Stores` already use — consistent
+  with `manage_organization` defaulting to `hq_admin` only). A `Steps` header tracks the three
+  stages; the body swaps between the CSR+OTP form, the compliance-check/production-CSID actions, and
+  the production-stage status + renew/revoke panel, driven by `GET /zatca/onboarding/status`. No new
+  frontend infrastructure — reuses the existing `api`/`errMsg` axios wrapper and `message.success`/
+  `message.error` pattern from `Team.tsx`, since this app has no data-fetching library beyond that.
+- **Live verification in the browser found a real bug, not just a cosmetic one.** Submitting the
+  Compliance CSID form against a dev environment with `ZATCA_API_BASE` unset — the expected,
+  routine case before real onboarding — returned a bare Internal Server Error: `complianceRequest()`
+  used `config.getOrThrow`, so the missing-config condition threw an uncaught `Error` that NestJS's
+  default filter turned into an opaque 500 instead of a message the UI's existing `errMsg()` could
+  show. Fixed by checking configuration explicitly and throwing `BadRequestException` with a clear
+  message — the same "degrades, does not crash" contract D-020 already established for billing,
+  extended here to onboarding. Caught by actually filling in and submitting the live form (network
+  tab showed the 500 directly), not by reading the code — exactly the class of gap code review
+  alone tends to miss, consistent with this project's standing verification discipline. Regression
+  covered in `zatca-api-client.spec.ts` (4 new tests: clean rejection when unconfigured, correct OTP
+  vs Basic-Auth header selection, and error-body propagation on a ZATCA-side rejection).
+
+## D-059: A real ZATCA primary source arrived — corrects the CSR structure, the wire shapes, and renewal
+
+- **Source:** the user supplied ZATCA's own "E-invoicing: User Manual — Developer Portal Manual
+  Version 3" (130 pages) after D-057/D-058 were built from the earlier Detailed Technical
+  Guideline plus general knowledge, both of which explicitly deferred the exact CSR/API wire
+  format to "the EGS vendor's manual" or a Swagger file neither document printed. This is that
+  manual. Every correction below replaces a documented guess with something the new source states
+  or shows directly (§5.3.1's literal OpenSSL `.cnf`, §4.2.4's literal FAQ request/response JSON),
+  not a second guess.
+- **The CSR structure was wrong, not just under-specified — this was the highest-severity finding.**
+  `zatca-csr.ts` put all nine business fields flat into the Subject DN. §5.3.1 prints ZATCA's own
+  `.cnf` and it splits them: **only** `C`/`OU`/`O`/`CN` belong in the Subject DN; EGS Serial Number,
+  Organization Identifier, Invoice Type, Location, and Industry belong in a `subjectAltName`
+  extension as a single `directoryName` GeneralName (`SN`/`UID`/`title`/`registeredAddress`/
+  `businessCategory` respectively — same OIDs already chosen, wrong location). Two extensions were
+  missing outright: `basicConstraints` (`CA:FALSE`) and `keyUsage`
+  (`digitalSignature, nonRepudiation, keyEncipherment`). A **fourth, previously-unknown extension**
+  — `certificateTemplateName` (Microsoft's CA-template-name OID, `1.3.6.1.4.1.311.20.2`, fixed
+  value `"ZATCA-Code-Signing"`) — turned out to be required and had no prior placeholder at all.
+  All four are now carried the standard way, as one PKCS#9 `extensionRequest` attribute
+  (`1.2.840.113549.1.9.14`) on the CSR, built with `pkijs.Extension`/`Extensions`/`GeneralName`/
+  `GeneralNames`/`RelativeDistinguishedNames`/`Attribute` rather than hand-rolled ASN.1. A CSR built
+  the old way would very likely have been rejected outright by ZATCA's real CA — this shipped
+  behind D-057/D-058's config gate, so nothing had called it against a real endpoint yet, but it
+  would have failed the very first live onboarding attempt.
+- **The Reporting/Clearance wire shapes were also wrong.** §4.2.4's FAQ prints the literal request
+  and response JSON: request body is exactly `{ invoiceHash, invoice }` — `zatca-api-client.ts` was
+  additionally sending a `uuid` field that has no place in that body. Response body is a **flat**
+  `{ invoiceHash, status, warnings, errors }`, not the nested `validationResults.{status,
+  warningMessages, errorMessages}` shape this client invented from memory — `warnings`/`errors` are
+  `null` on a clean pass, not `[]`. HTTP semantics are also now handled per the same FAQ: 202 means
+  "accepted with warnings" (not an error), 303 means the wrong endpoint was used for the document's
+  type. `fetch` follows 303 by default and would silently turn the POST into a GET against
+  `Location`, corrupting the result without any visible failure — `redirect: 'manual'` plus checking
+  `res.status === 303 || res.type === 'opaqueredirect'` stops that, surfaced as a new
+  `'wrong_endpoint'` outcome rather than folded into `'rejected'`.
+- **Renewal was structurally wrong, not just detail-wrong.** D-058 implemented renewal as
+  `requestComplianceCsid()` followed by `requestProductionCsid()` — a full re-run of onboarding's
+  two-step exchange. §2.3.10.4's walkthrough shows renewal is **one call**: authenticate with an
+  existing CSID via Basic Auth, submit a fresh OTP *and* a fresh CSR together, and receive a new
+  Production CSID directly — no separate compliance-check gate. The manual is internally
+  inconsistent about *which* CSID authenticates that call (§2.3.11's summary table says Compliance
+  CSID, matching how the sandbox lets the Renewal API be tested in isolation; the walkthrough's own
+  auth step says "obtained from API #3," i.e. also Compliance). This implementation authenticates
+  with the org's **current Production CSID** instead — the standard PKI renewal pattern (prove
+  possession of your current live credential to get the next one), and the only reading consistent
+  with a live renewal actually depending on prior successful onboarding rather than on a sandbox
+  test-convenience substitution. Flagged as a judgment call in `zatca-onboarding.service.ts`'s
+  module comment, not asserted as certain. A fresh CSR means a fresh key pair, so renewal now also
+  replaces the stored private key — the original implementation never touched it, which would have
+  left a renewed certificate paired with a stale key.
+- **`ZatcaApiClient.complianceRequest()`'s auth parameter became an options object**
+  (`{ otp?, csid?, secret? }`) instead of two positional arguments, because renewal is the first
+  call that needs Basic Auth *and* an OTP header simultaneously — the old `(otpOrCsid, secret?)`
+  shape could only express one or the other.
+- **What remains an acknowledged gap, not a new guess:** the literal path segments (`/compliance`,
+  `/production/csids`, `/production/csids/renewal`) and the exact key `compliance_request_id` are
+  still this module's own reconstruction — the manual describes these calls at the level of
+  Developer Portal *screenshots* (images, not extractable text), not printed field names. Confirm
+  against the real Swagger files before a live onboarding attempt, same standing caveat as D-057.
+- **Verification:** all corrections are covered by updated/new tests — `zatca-csr.spec.ts`'s
+  existing OpenSSL round-trip and full-text field checks pass unchanged against the restructured
+  CSR (confirming `openssl req -text` renders the `subjectAltName` GeneralName's RDN values, so the
+  fields are genuinely present, not just structurally different); `zatca-api-client.spec.ts` gained
+  cases for the flat response shape, HTTP 202/303 handling, and all three `complianceRequest` auth
+  combinations; `zatca-onboarding.spec.ts` gained a full `renewProductionCsid` test proving it makes
+  exactly one API call (not two), authenticates with Basic Auth from the *current* production
+  credential, and rotates the stored private key. `npx tsc --noEmit` clean; full `src/zatca` suite
+  (76 tests) passes.
+
+## D-060: Platform Admin finalized — three real bugs, three missing features, and the module's first tests
+
+- **Trigger:** an audit across the whole Platform Admin surface (`apps/api/src/platform/`,
+  `apps/api/src/billing/`, `apps/api/src/auth/guards/platform-admin.guard.ts`, and
+  `apps/platform-admin/`) requested to bring it from "built" to actually complete. The module had
+  shipped (D-011-era) with tenant CRUD, plans, subscriptions, and impersonation, but three things
+  were silently broken and three PRD-listed capabilities were simply absent.
+- **Bug 1 — platform-admin token refresh was unreachable.** `AuthService.rotateRefreshToken` was
+  shared by both flows but had `expectedType: 'staff'` hardcoded, so a platform admin's refresh
+  token was always rejected as the wrong principal type — every platform session silently died at
+  the access-token TTL with no way to renew it, and nothing in the test suite exercised that path
+  because `platform-admin.e2e-spec.ts` only ever exercised login, not refresh. Fixed with a
+  dedicated `AuthService.platformRefresh()` (mirrors the existing `customerRefresh`) and a new
+  `POST /auth/platform/refresh` route; `apps/platform-admin/src/api.ts` was rewritten to persist
+  `refreshToken` and retry once on 401 via the same pattern `apps/admin` already used.
+- **Bug 2 — feature gating was data with no enforcement.** `SubscriptionPlan.features` (a string
+  array: `transfers`, `reorder_alerts`, `whatsapp`, `pwa`, `regional_managers`, `multi_store`) was
+  written by `upsertPlan` and returned by every read, but no code path ever checked it — a tenant on
+  the Basic plan could use every Enterprise feature. Added `FeatureGateService.getFeatures(orgId)`
+  (Redis-cached 5 min, `[]` unless subscription status is `active`/`trialing`) and
+  `assertFeature(orgId, feature)` (throws `HttpException(402)`), wired into five call sites:
+  `inventory.service.ts#transfer`, `inventory/alerts.service.ts#listAlerts`
+  (`reorder_alerts`), `notifications/notification.worker.ts` (`whatsapp` — a graceful fallback to
+  push inside a BullMQ worker, not a thrown 402, since there's no HTTP response to throw into),
+  `team/team.service.ts#assertRegionalManagerAllowed` (`regional_managers`, checked in both
+  `invite()` and `updateRoles()`), and `auth/otp.service.ts#verifyOtp` (`pwa`, checked *after*
+  successful code verification specifically so the gate can't be used to enumerate whether a phone
+  number exists — `requestOtp` never reveals that regardless of plan). **`multi_store` is
+  deliberately left unenforced**: the seed data is self-contradictory (`pro` has `maxStores: 5` but
+  its `features` array omits `multi_store`), so gating it would 402 real seeded tenants for a plan
+  limit that's already independently enforced by the `maxStores` check in `stores.service.ts`.
+  Flagged in `feature-gate.service.ts`'s module comment as a known gap pending a seed-data fix, not
+  silently worked around.
+- **Bug 3 — the impersonation link couldn't actually sign an operator in.** `PlatformService.
+  impersonate()` returned a bare staff-typed JWT; the platform-admin frontend had nowhere to put it
+  because `apps/admin`'s zustand session store needs a full `{user, stores}` shape, not a token
+  string, and nothing minted that shape outside of a real interactive login. Added
+  `AuthService.staffSession(userId)` / `buildStaffSession()` (extracted from `staffLogin`, reused by
+  both) and `GET /auth/session`, which resolves any valid staff-typed access token — impersonation
+  or ordinary — into the same session shape a real login produces. `apps/admin` gained an
+  `/impersonate?token=` route (`Impersonate.tsx`) that calls it and an `isImpersonating` banner in
+  `AppLayout.tsx` with an explicit "End impersonation" action. The platform-admin UI hands off via a
+  real, already-resolved `<Button href=... target="_blank">` the operator clicks themselves, per the
+  standing D-047/D-049/D-050 rule against calling `window.open()` after an `await` or synthetically
+  clicking an anchor — both reliably trigger popup blockers.
+- **Three PRD capabilities that plans/impersonation implied but nothing implemented, now built:**
+  platform admin account management (`PlatformAdmin` CRUD — `createPlatformAdmin`/
+  `updatePlatformAdmin`/`listPlatformAdmins`, all `super_admin`-only, with a load-bearing guard in
+  `updatePlatformAdmin`: a `super_admin` cannot deactivate their *own* row, checked by
+  `userId === actorId`, not by admin level, so the very last active super_admin can't accidentally
+  lock themselves out); a platform-wide metrics dashboard (`getMetrics()` — org/subscription counts
+  by status via `groupBy`/`_count._all`, store/user totals, an MRR estimate summed from active +
+  trialing subscriptions' `plan.monthlyPrice`, five most recent signups); and Stripe invoice history
+  surfaced per tenant (`StripeService.listInvoices`, `GET /admin/billing/organizations/:id/invoices`,
+  gated to `super_admin`/`billing` — PA-6).
+- **`FeatureGateService` moved to its own zero-import `FeatureGateModule`** rather than staying a
+  `PlatformModule` provider, because `AuthModule` needs it too (for `OtpService`'s `pwa` check) and
+  `AuthModule → PlatformModule → AuthModule` would have been a circular import. Every consumer
+  (`auth`, `platform`, `billing`, `inventory`, `notifications`, `team`) now imports
+  `FeatureGateModule` directly instead of routing through `PlatformModule`.
+- **Verification:** backend gained unit tests for every previously-untested piece —
+  `feature-gate.service.spec.ts` (8), `auth/guards/platform-admin.guard.spec.ts` (9, including that
+  it re-queries the database on every single call rather than trusting the JWT, which is what makes
+  a revoked admin's existing token stop working immediately), `audit/audit.service.spec.ts` (4),
+  `platform/platform.service.spec.ts` (19, covering all mutation/query methods including the
+  self-deactivation guard and the plan-code-vs-plan-id resolution in `changeSubscription`),
+  `platform.controller.spec.ts` (15) and `billing/billing.controller.spec.ts` (7, including that the
+  unauthenticated Stripe webhook route 400s before ever touching Stripe when the signature or raw
+  body is missing) — full `apps/api` suite is 254 tests across 23 files, all green.
+  `test/platform-admin.e2e-spec.ts` grew from 4 to 17 cases against a live database: the D-060
+  feature-gate 402s (transfers/regional_managers/pwa) under a downgraded plan, plan CRUD via
+  upsert-by-code, a subscription upgrade that lifts a 402 on the very next request (proving the
+  Redis cache invalidation actually fires), per-route `RequireAdminLevel` allow-list enforcement
+  across `billing` and `support` tokens (not just the guard's unit-level allow-list logic), and —
+  the case this module most needed — revoking a platform admin mid-session and confirming their
+  still-valid, unexpired JWT is rejected on its *very next* request, not merely at next login.
+  `apps/platform-admin` had zero test files or framework; added Vitest + `@testing-library/react`
+  (matching the app's existing Vite tooling, not introduced project-wide) with two suites:
+  `api.test.ts` exercises the real interceptor chain against a scripted axios adapter — 401 retry
+  with a fresh token, refresh-failure logout, no-refresh-token short-circuit, the `_retry` flag
+  preventing a second attempt, and two concurrent 401s deduplicating into one refresh call — and
+  `pages/PlatformAdmins.test.tsx` locks in that the signed-in admin's own row never renders a
+  Revoke control, mirroring the backend guard at the UI layer. Test files are excluded from the
+  app's production `tsconfig.json` (a separate `tsconfig.vitest.json` type-checks them) so `tsc -b`
+  isn't broken by `@testing-library/jest-dom`'s ambient matcher types. Every change was also
+  live-verified in a real browser against the dev database: login, tenant provisioning, plan
+  changes, suspend/reactivate, impersonate → land in `apps/admin` already signed in, create/revoke a
+  platform admin, and the dashboard's numbers checked against direct Postgres queries.

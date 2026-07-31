@@ -2,11 +2,13 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Get,
   Headers,
   HttpCode,
   Param,
   ParseUUIDPipe,
   Post,
+  Query,
   RawBodyRequest,
   Req,
   UseGuards,
@@ -54,6 +56,12 @@ export class BillingController {
   @RequireAdminLevel('super_admin', 'billing')
   portal(@Param('id', ParseUUIDPipe) id: string) {
     return this.stripe.createPortalSession(id);
+  }
+
+  @Get('organizations/:id/invoices')
+  @RequireAdminLevel('super_admin', 'billing')
+  invoices(@Param('id', ParseUUIDPipe) id: string, @Query('limit') limit?: string) {
+    return this.stripe.listInvoices(id, limit ? Number(limit) : undefined);
   }
 }
 

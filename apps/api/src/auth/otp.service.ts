@@ -10,6 +10,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import type Redis from 'ioredis';
 import { PrismaService } from '../prisma/prisma.service';
+import { FeatureGateService } from '../platform/feature-gate.service';
 import { REDIS_CLIENT } from '../redis/redis.module';
 import { TokenService } from './token.service';
 
@@ -25,6 +26,7 @@ export class OtpService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly tokens: TokenService,
+    private readonly featureGate: FeatureGateService,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
   ) {}
 
@@ -115,6 +117,10 @@ export class OtpService {
     if (!customer) {
       throw new UnauthorizedException('Invalid or expired code');
     }
+    // Checked only after a valid code is presented — the customer has
+    // already proven phone possession at this point, so a 402 here reveals
+    // nothing an attacker couldn't get by other means (D-060).
+    await this.featureGate.assertFeature(customer.organizationId, 'pwa');
 
     await this.redis.del(this.codeKey(phone), this.attemptsKey(phone));
 

@@ -2,6 +2,7 @@ import { Module, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Queue } from 'bullmq';
 import { InvoicesModule } from '../invoices/invoices.module';
+import { FeatureGateModule } from '../platform/feature-gate.module';
 import { MailerService } from './mailer.service';
 import { NotificationWorker } from './notification.worker';
 import { PushService } from './push.service';
@@ -29,7 +30,7 @@ const queueFactory = (name: string) => ({
 });
 
 @Module({
-  imports: [InvoicesModule],
+  imports: [InvoicesModule, FeatureGateModule],
   controllers: [WhatsappWebhookController],
   providers: [
     queueFactory(QUEUE_NAMES.whatsapp),

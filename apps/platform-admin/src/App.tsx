@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import {
   AuditOutlined,
+  DashboardOutlined,
   LogoutOutlined,
+  SafetyCertificateOutlined,
   ShopOutlined,
   TagsOutlined,
 } from '@ant-design/icons';
@@ -19,6 +21,8 @@ import {
 import axios from 'axios';
 import { errMsg, useAuth } from './api';
 import Audit from './pages/Audit';
+import Dashboard from './pages/Dashboard';
+import PlatformAdmins from './pages/PlatformAdmins';
 import Plans from './pages/Plans';
 import TenantDetail from './pages/TenantDetail';
 import Tenants from './pages/Tenants';
@@ -71,11 +75,16 @@ function Shell() {
   const navigate = useNavigate();
   if (!accessToken) return <Navigate to="/login" replace />;
 
-  const key = location.pathname.startsWith('/plans')
-    ? '/plans'
-    : location.pathname.startsWith('/audit')
-      ? '/audit'
-      : '/';
+  const key = location.pathname.startsWith('/tenants')
+    ? '/tenants'
+    : location.pathname.startsWith('/plans')
+      ? '/plans'
+      : location.pathname.startsWith('/audit')
+        ? '/audit'
+        : location.pathname.startsWith('/platform-admins')
+          ? '/platform-admins'
+          : '/';
+  const isSuperAdmin = user?.adminLevel === 'super_admin';
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
@@ -88,9 +97,19 @@ function Shell() {
           mode="inline"
           selectedKeys={[key]}
           items={[
-            { key: '/', icon: <ShopOutlined />, label: <Link to="/">Tenants</Link> },
+            { key: '/', icon: <DashboardOutlined />, label: <Link to="/">Dashboard</Link> },
+            { key: '/tenants', icon: <ShopOutlined />, label: <Link to="/tenants">Tenants</Link> },
             { key: '/plans', icon: <TagsOutlined />, label: <Link to="/plans">Plans</Link> },
             { key: '/audit', icon: <AuditOutlined />, label: <Link to="/audit">Audit Logs</Link> },
+            ...(isSuperAdmin
+              ? [
+                  {
+                    key: '/platform-admins',
+                    icon: <SafetyCertificateOutlined />,
+                    label: <Link to="/platform-admins">Platform Admins</Link>,
+                  },
+                ]
+              : []),
           ]}
         />
       </Layout.Sider>
@@ -132,10 +151,12 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route element={<Shell />}>
-          <Route path="/" element={<Tenants />} />
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/tenants" element={<Tenants />} />
           <Route path="/tenants/:id" element={<TenantDetail />} />
           <Route path="/plans" element={<Plans />} />
           <Route path="/audit" element={<Audit />} />
+          <Route path="/platform-admins" element={<PlatformAdmins />} />
         </Route>
       </Routes>
     </BrowserRouter>

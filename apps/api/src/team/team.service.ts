@@ -16,6 +16,7 @@ import { AuditService } from '../audit/audit.service';
 import { staffInvitation } from '../notifications/email-templates';
 import { MailerService } from '../notifications/mailer.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { FeatureGateService } from '../platform/feature-gate.service';
 import type {
   AcceptInviteDto,
   InviteUserDto,
@@ -32,6 +33,7 @@ export class TeamService {
     private readonly config: ConfigService,
     private readonly audit: AuditService,
     private readonly mailer: MailerService,
+    private readonly featureGate: FeatureGateService,
   ) {}
 
   private async assertActorCanGrantHq(actorId: string, wantsHq: boolean) {
@@ -39,6 +41,13 @@ export class TeamService {
     const actor = await this.prisma.user.findUnique({ where: { id: actorId } });
     if (actor?.orgRole !== 'hq_admin') {
       throw new ForbiddenException('Only an HQ Admin can grant HQ Admin access');
+    }
+  }
+
+  /** Assigning the regional_manager role is an Enterprise-plan feature (D-060). */
+  private async assertRegionalManagerAllowed(orgId: string, assignments: StoreAssignmentDto[]) {
+    if (assignments.some((a) => a.role === 'regional_manager')) {
+      await this.featureGate.assertFeature(orgId, 'regional_managers');
     }
   }
 
@@ -89,6 +98,7 @@ export class TeamService {
     }
     await this.assertActorCanGrantHq(actorId, dto.asHqAdmin === true);
     await this.assertStoresInOrg(orgId, assignments);
+    await this.assertRegionalManagerAllowed(orgId, assignments);
 
     const email = dto.email.toLowerCase();
     const existingUser = await this.prisma.user.findUnique({ where: { email } });
@@ -275,6 +285,7 @@ export class TeamService {
     await this.assertActorCanGrantHq(actorId, dto.asHqAdmin === true);
     const assignments = dto.assignments ?? [];
     await this.assertStoresInOrg(orgId, assignments);
+    await this.assertRegionalManagerAllowed(orgId, assignments);
 
     const oldValue = {
       orgRole: user.orgRole,

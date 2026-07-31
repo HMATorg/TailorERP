@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { JwtModule } from '@nestjs/jwt';
+import { FeatureGateModule } from '../platform/feature-gate.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { CustomerAuthController } from './customer-auth.controller';
@@ -11,7 +12,7 @@ import { OtpService } from './otp.service';
 import { TokenService } from './token.service';
 
 @Module({
-  imports: [JwtModule.register({ global: true })],
+  imports: [JwtModule.register({ global: true }), FeatureGateModule],
   controllers: [AuthController, CustomerAuthController],
   providers: [
     AuthService,

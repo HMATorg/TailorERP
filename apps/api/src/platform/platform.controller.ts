@@ -19,7 +19,9 @@ import type { AccessTokenPayload } from '../auth/auth.types';
 import {
   ChangeSubscriptionDto,
   CreateOrganizationDto,
+  CreatePlatformAdminDto,
   UpdateOrganizationDto,
+  UpdatePlatformAdminDto,
   UpsertPlanDto,
 } from './dto/platform.dto';
 import { PlatformService } from './platform.service';
@@ -28,6 +30,12 @@ import { PlatformService } from './platform.service';
 @UseGuards(PlatformAdminGuard)
 export class PlatformController {
   constructor(private readonly platform: PlatformService) {}
+
+  @Get('metrics')
+  @RequireAdminLevel('super_admin', 'billing', 'support')
+  getMetrics() {
+    return this.platform.getMetrics();
+  }
 
   @Get('organizations')
   @RequireAdminLevel('super_admin', 'billing', 'support')
@@ -103,6 +111,35 @@ export class PlatformController {
     @Ip() ip: string,
   ) {
     return this.platform.impersonate(principal.sub, id, ip);
+  }
+
+  // ── Platform admin accounts (D-060) — super_admin only ──
+
+  @Get('platform-admins')
+  @RequireAdminLevel('super_admin')
+  listPlatformAdmins() {
+    return this.platform.listPlatformAdmins();
+  }
+
+  @Post('platform-admins')
+  @RequireAdminLevel('super_admin')
+  createPlatformAdmin(
+    @CurrentUser() principal: AccessTokenPayload,
+    @Body() dto: CreatePlatformAdminDto,
+    @Ip() ip: string,
+  ) {
+    return this.platform.createPlatformAdmin(principal.sub, dto, ip);
+  }
+
+  @Put('platform-admins/:id')
+  @RequireAdminLevel('super_admin')
+  updatePlatformAdmin(
+    @CurrentUser() principal: AccessTokenPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdatePlatformAdminDto,
+    @Ip() ip: string,
+  ) {
+    return this.platform.updatePlatformAdmin(principal.sub, id, dto, ip);
   }
 
   @Get('audit-logs')

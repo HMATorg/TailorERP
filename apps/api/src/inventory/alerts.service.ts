@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { FeatureGateService } from '../platform/feature-gate.service';
 import type { UpsertReorderSettingDto } from './dto/inventory.dto';
 
 @Injectable()
@@ -8,9 +9,11 @@ export class AlertsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly featureGate: FeatureGateService,
   ) {}
 
-  listAlerts(storeId: string, status?: string) {
+  async listAlerts(orgId: string, storeId: string, status?: string) {
+    await this.featureGate.assertFeature(orgId, 'reorder_alerts');
     return this.prisma.inventoryRestockAlert.findMany({
       where: { storeId, ...(status ? { status: status as never } : {}) },
       orderBy: { createdAt: 'desc' },

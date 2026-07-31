@@ -131,3 +131,29 @@ export class UpsertPlanDto {
   @MaxLength(255)
   stripeYearlyPriceId?: string;
 }
+
+export class CreatePlatformAdminDto {
+  @IsEmail()
+  email: string;
+
+  @IsString()
+  @MinLength(8)
+  password: string;
+
+  @IsString()
+  @IsOptional()
+  fullName?: string;
+
+  @IsIn(['super_admin', 'billing', 'support'])
+  adminLevel: 'super_admin' | 'billing' | 'support';
+}
+
+export class UpdatePlatformAdminDto {
+  @IsIn(['super_admin', 'billing', 'support'])
+  @IsOptional()
+  adminLevel?: 'super_admin' | 'billing' | 'support';
+
+  @IsBoolean()
+  @IsOptional()
+  isActive?: boolean;
+}

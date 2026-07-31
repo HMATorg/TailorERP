@@ -26,10 +26,14 @@ interface AuthState {
   refreshToken: string | null;
   /** 'all' = HQ overview (aggregated), otherwise a store id */
   activeStoreId: string | null;
+  /** Set only via startImpersonatedSession — drives the "you are impersonating" banner. */
+  isImpersonating: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
   tryRefresh: () => Promise<boolean>;
   setActiveStore: (id: string) => void;
+  /** Impersonation handoff (D-060) — populates the session from a platform-admin-issued token instead of a password login. */
+  startImpersonatedSession: (accessToken: string, user: AuthUser, stores: StoreSummary[]) => void;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -40,6 +44,7 @@ export const useAuthStore = create<AuthState>()(
       accessToken: null,
       refreshToken: null,
       activeStoreId: null,
+      isImpersonating: false,
 
       async login(email, password) {
         const { data } = await axios.post('/api/v1/auth/login', { email, password });
@@ -50,6 +55,7 @@ export const useAuthStore = create<AuthState>()(
           accessToken: data.accessToken,
           refreshToken: data.refreshToken,
           activeStoreId: isHq ? 'all' : (data.stores[0]?.id ?? null),
+          isImpersonating: false,
         });
       },
 
@@ -58,7 +64,29 @@ export const useAuthStore = create<AuthState>()(
         if (refreshToken) {
           void axios.post('/api/v1/auth/logout', { refreshToken }).catch(() => undefined);
         }
-        set({ user: null, stores: [], accessToken: null, refreshToken: null, activeStoreId: null });
+        set({
+          user: null,
+          stores: [],
+          accessToken: null,
+          refreshToken: null,
+          activeStoreId: null,
+          isImpersonating: false,
+        });
+      },
+
+      startImpersonatedSession(accessToken, user, stores) {
+        const isHq = user.orgRole === 'hq_admin';
+        // No refresh token: impersonation tokens are deliberately short-lived
+        // and non-renewable (see PlatformService.impersonate's 30-minute
+        // cap, D-060) — the session ends by expiring, not by logout alone.
+        set({
+          user,
+          stores,
+          accessToken,
+          refreshToken: null,
+          activeStoreId: isHq ? 'all' : (stores[0]?.id ?? null),
+          isImpersonating: true,
+        });
       },
 
       async tryRefresh() {

@@ -189,4 +189,54 @@ describe('StripeService', () => {
       }),
     );
   });
+
+  describe('listInvoices (PA-6)', () => {
+    it('returns an empty list without calling Stripe when the org has no customer yet', async () => {
+      prisma.organization.findUnique.mockResolvedValue({ stripeCustomerId: null });
+      const result = await service.listInvoices('org-1');
+      expect(result).toEqual([]);
+    });
+
+    it('maps the Stripe invoice list shape into the response the platform-admin UI reads', async () => {
+      prisma.organization.findUnique.mockResolvedValue({ stripeCustomerId: 'cus_123' });
+      const list = jest.fn().mockResolvedValue({
+        data: [
+          {
+            id: 'in_1',
+            number: 'INV-0001',
+            status: 'paid',
+            amount_due: 0,
+            amount_paid: 49900,
+            currency: 'sar',
+            created: 1_800_000_000,
+            hosted_invoice_url: 'https://stripe.example/inv_1',
+            invoice_pdf: 'https://stripe.example/inv_1.pdf',
+          },
+        ],
+      });
+      // Real Stripe client only exists after onModuleInit finds a secret key,
+      // which these unit tests never run — inject a fake client directly
+      // rather than exercising module bootstrap for one method.
+      (service as unknown as { stripe: { invoices: { list: typeof list } } }).stripe = {
+        invoices: { list },
+      };
+
+      const result = await service.listInvoices('org-1', 5);
+
+      expect(list).toHaveBeenCalledWith({ customer: 'cus_123', limit: 5 });
+      expect(result).toEqual([
+        {
+          id: 'in_1',
+          number: 'INV-0001',
+          status: 'paid',
+          amountDue: 0,
+          amountPaid: 49900,
+          currency: 'sar',
+          created: new Date(1_800_000_000 * 1000),
+          hostedInvoiceUrl: 'https://stripe.example/inv_1',
+          invoicePdf: 'https://stripe.example/inv_1.pdf',
+        },
+      ]);
+    });
+  });
 });

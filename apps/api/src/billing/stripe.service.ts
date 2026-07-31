@@ -133,6 +133,38 @@ export class StripeService implements OnModuleInit {
     return { url: session.url };
   }
 
+  /**
+   * Recent invoices for the tenant's Stripe customer (PA-6). An org that has
+   * never gone through checkout/portal has no `stripeCustomerId` yet — that's
+   * not an error, it genuinely has no invoices, so this returns an empty list
+   * rather than 404ing (mirrors `ensureCustomer`'s "create on first use"
+   * philosophy: no customer yet is a normal state, not a fault).
+   */
+  async listInvoices(organizationId: string, limit = 10) {
+    const org = await this.prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { stripeCustomerId: true },
+    });
+    if (!org) throw new NotFoundException('Organization not found');
+    if (!org.stripeCustomerId) return [];
+
+    const invoices = await this.client().invoices.list({
+      customer: org.stripeCustomerId,
+      limit: Math.min(100, Math.max(1, limit)),
+    });
+    return invoices.data.map((inv) => ({
+      id: inv.id,
+      number: inv.number,
+      status: inv.status,
+      amountDue: inv.amount_due,
+      amountPaid: inv.amount_paid,
+      currency: inv.currency,
+      created: new Date(inv.created * 1000),
+      hostedInvoiceUrl: inv.hosted_invoice_url,
+      invoicePdf: inv.invoice_pdf,
+    }));
+  }
+
   verifyWebhook(rawBody: Buffer, signature: string): Stripe.Event {
     const secret = this.config.get<string>('STRIPE_WEBHOOK_SECRET');
     if (!secret) {
