@@ -6,7 +6,7 @@
 > the repo — why something is blocked, what a trap looks like — belongs in the
 > auto-memory directory, not here.
 
-**Parent** `a513690` on `main` · **generated** 2026-07-31 20:41Z · staged into the commit being created on top of it
+**Parent** `2e76296` on `main` · **generated** 2026-07-31 20:41Z · staged into the commit being created on top of it
 
 _History below runs to the parent; the commit carrying this file is its child._
 
@@ -178,8 +178,8 @@ but it is the first place to look when something has quietly been undone.
 | `D-054` | Trousers gets its own measurement matrix, diagram and yield formula — not Thobe's, relabeled | 12 file(s) |
 | `D-055` | Five more Thobe measurement points, a cut-style/cufflink spec, and an urgent flag — read off a real tailor shop's own paper order form | 8 file(s) |
 | `D-056` | The measurement diagram moved every hotspot off the garment into labelled columns | — |
-| `D-057` | ZATCA Phase 2 — real XAdES signing, CSR generation, and the Reporting/Clearance client | 11 file(s) |
-| `D-058` | ZATCA onboarding orchestration — three explicit steps, a permission that didn't exist, and one deliberate non-feature | 7 file(s) |
+| `D-057` | ZATCA Phase 2 — real XAdES signing, CSR generation, and the Reporting/Clearance client | 12 file(s) |
+| `D-058` | ZATCA onboarding orchestration — three explicit steps, a permission that didn't exist, and one deliberate non-feature | 8 file(s) |
 | `D-059` | A real ZATCA primary source arrived — corrects the CSR structure, the wire shapes, and renewal | 4 file(s) |
 | `D-060` | Platform Admin finalized — three real bugs, three missing features, and the module's first tests | 23 file(s) |
 
@@ -197,6 +197,7 @@ currently skipped. They are a shape check, not a substitute for running the suit
 
 | Commit | Date | Subject |
 | --- | --- | --- |
+| `2e76296` | 2026-08-01 | Add trouser measurements, tailor-shop reference fields, and Print Center reprint/settle flow (D-051-056) |
 | `a513690` | 2026-07-27 | Make the A4 button download a file instead of trying to open a tab |
 | `3c157ae` | 2026-07-27 | Fix Print Center: nav bar bleeding into every print, invalid @page, blocked A4 popup |
 | `4a941c2` | 2026-07-27 | Let the counter register walk-ins and print a full Print Center |

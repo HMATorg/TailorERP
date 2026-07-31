@@ -11,6 +11,7 @@ import Login from './pages/Login';
 import NewOrder from './pages/NewOrder';
 import OrderDetail from './pages/OrderDetail';
 import Orders from './pages/Orders';
+import Settings from './pages/Settings';
 import Stores from './pages/Stores';
 import Team from './pages/Team';
 
@@ -32,6 +33,7 @@ export default function App() {
           <Route path="/appointments" element={<Appointments />} />
           <Route path="/team" element={<Team />} />
           <Route path="/stores" element={<Stores />} />
+          <Route path="/settings" element={<Settings />} />
         </Route>
       </Routes>
     </BrowserRouter>

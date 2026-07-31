@@ -31,6 +31,8 @@ export const PERMISSIONS = [
   'manage_appointments',
   'manage_roles',
   'manage_stores',
+  /// Org-wide compliance settings (currently: ZATCA onboarding) — hq_admin only, see D-058
+  'manage_organization',
   // Counter (POS)
   'use_pos',
   'pos_checkout',

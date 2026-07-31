@@ -3,11 +3,15 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 import { AuditService } from '../audit/audit.service';
+import { decryptSecret } from '../notifications/crypto.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
+import { ZatcaApiClient } from './zatca-api-client';
+import { readCertFacts } from './zatca-cert';
 import { GENESIS_PIH, findChainBreak, hashInvoiceXml } from './zatca-hash';
+import { signInvoiceXml } from './zatca-sign';
 import { buildQrBase64 } from './zatca-tlv';
-import { buildUblInvoice, canonicalize, type UblLine } from './zatca-xml';
+import { buildUblInvoice, canonicalize, stripSignatureElements, type UblLine } from './zatca-xml';
 import { KSA_VAT_RATE, splitInclusive } from './zatca-vat';
 
 /**
@@ -27,6 +31,7 @@ export class ZatcaService {
     private readonly config: ConfigService,
     private readonly storage: StorageService,
     private readonly audit: AuditService,
+    private readonly apiClient: ZatcaApiClient,
   ) {}
 
   /**
@@ -73,7 +78,15 @@ export class ZatcaService {
       where: { id: invoiceId },
       include: {
         organization: {
-          select: { id: true, name: true, vatNumber: true, defaultCurrency: true, taxId: true },
+          select: {
+            id: true,
+            name: true,
+            vatNumber: true,
+            defaultCurrency: true,
+            taxId: true,
+            zatcaCsidEncrypted: true,
+            zatcaPrivateKeyEncrypted: true,
+          },
         },
         order: {
           include: {
@@ -147,15 +160,41 @@ export class ZatcaService {
       const canonical = canonicalize(xml);
       const invoiceHash = hashInvoiceXml(canonical);
 
-      const qr = buildQrBase64({
-        sellerName: org.name,
-        vatNumber: org.vatNumber ?? org.taxId ?? '000000000000000',
-        timestamp: invoice.issuedAt.toISOString(),
-        invoiceTotal: totals.gross.toFixed(2),
-        vatTotal: totals.vat.toFixed(2),
-        invoiceHash,
-        // tags 7–9 are added once a CSID is provisioned (D-029)
-      });
+      // Tags 7–9 (the cryptographic stamp) need a CSID — a signing key and a
+      // ZATCA-issued certificate for this org (D-057). Orgs that have not
+      // completed onboarding fall back to the Phase 1 tags 1–5 QR, same as
+      // before (D-029) — the invoice is still saved and printable, just not
+      // yet cryptographically stamped.
+      let finalXml = canonical;
+      let qr: string;
+      if (org.zatcaCsidEncrypted && org.zatcaPrivateKeyEncrypted) {
+        const encryptionKey = this.config.getOrThrow<string>('TOKEN_ENCRYPTION_KEY');
+        const signed = signInvoiceXml({
+          baseXml: xml,
+          invoiceHash,
+          certificatePem: decryptSecret(org.zatcaCsidEncrypted, encryptionKey),
+          privateKeyPem: decryptSecret(org.zatcaPrivateKeyEncrypted, encryptionKey),
+          isSimplified: invoice.zatcaInvoiceType === 'simplified',
+          qr: {
+            sellerName: org.name,
+            vatNumber: org.vatNumber ?? org.taxId ?? '000000000000000',
+            timestamp: invoice.issuedAt.toISOString(),
+            invoiceTotal: totals.gross.toFixed(2),
+            vatTotal: totals.vat.toFixed(2),
+          },
+        });
+        finalXml = signed.signedXml;
+        qr = signed.qrCodeBase64;
+      } else {
+        qr = buildQrBase64({
+          sellerName: org.name,
+          vatNumber: org.vatNumber ?? org.taxId ?? '000000000000000',
+          timestamp: invoice.issuedAt.toISOString(),
+          invoiceTotal: totals.gross.toFixed(2),
+          vatTotal: totals.vat.toFixed(2),
+          invoiceHash,
+        });
+      }
 
       const updated = await tx.invoice.update({
         where: { id: invoice.id },
@@ -171,10 +210,14 @@ export class ZatcaService {
           totalAmount: totals.gross,
         },
       });
-      return { updated, xml: canonical, icv };
+      return { updated, xml: finalXml, icv };
     });
 
-    // Archive the exact document that was hashed — required for audit.
+    // Archives the *signed* document when a CSID is provisioned (the actual
+    // submittable file), or the unsigned canonical form otherwise — either
+    // way, the exact bytes `invoiceHash` was computed from remain recoverable
+    // by re-stripping UBLExtensions/QR/Signature per Section 5 Step 1, which
+    // is exactly what verifyChain()'s re-hash check already assumes.
     if (this.storage.isEnabled()) {
       try {
         const key = `zatca/${org.id}/${invoice.invoiceNumber}.xml`;
@@ -254,7 +297,12 @@ export class ZatcaService {
         }
         try {
           const xml = await this.storage.getObject(inv.xmlUrl);
-          if (hashInvoiceXml(xml.toString('utf8')) !== inv.invoiceHash) {
+          // The archive holds the final (signed, if a CSID exists) document;
+          // strip back to the pre-signature form and re-canonicalise — the
+          // exact input invoiceHash was computed from — D-057, mirrors
+          // Section 5 Step 1 in reverse.
+          const unsigned = canonicalize(stripSignatureElements(xml.toString('utf8')));
+          if (hashInvoiceXml(unsigned) !== inv.invoiceHash) {
             hashMismatches.push(inv.invoiceNumber);
           }
         } catch {
@@ -280,26 +328,90 @@ export class ZatcaService {
   }
 
   /**
-   * Queues the invoice for the Fatoora portal. Real submission needs a CSID;
-   * without one the invoice is marked pending and surfaced in the compliance
-   * report rather than silently treated as filed.
+   * Submits the invoice to Fatoora — Reporting for simplified (B2C) invoices,
+   * Clearance for standard (B2B) ones (guideline §4). Real submission needs a
+   * **production-stage** CSID and its paired API secret from ZATCA onboarding
+   * (D-058); a compliance-stage CSID exists only to run onboarding's own
+   * compliance checks and is never valid for real Reporting/Clearance calls,
+   * so `zatcaEnvironment` must equal `'production'`, not just be present.
+   * Without one, the invoice is marked pending and surfaced in the
+   * compliance report rather than silently treated as filed (D-029).
    */
   async submit(invoiceId: string) {
-    const apiBase = this.config.get<string>('ZATCA_API_BASE');
     const invoice = await this.prisma.invoice.findUnique({
       where: { id: invoiceId },
-      include: { organization: { select: { zatcaCsidEncrypted: true } } },
+      include: {
+        organization: {
+          select: { zatcaCsidEncrypted: true, zatcaApiSecretEncrypted: true, zatcaEnvironment: true },
+        },
+      },
     });
     if (!invoice) throw new NotFoundException('Invoice not found');
 
-    if (!apiBase || !invoice.organization.zatcaCsidEncrypted) {
+    const org = invoice.organization;
+    if (
+      !this.apiClient.isConfigured() ||
+      !org.zatcaCsidEncrypted ||
+      !org.zatcaApiSecretEncrypted ||
+      org.zatcaEnvironment !== 'production'
+    ) {
       this.logger.warn(
-        `Invoice ${invoice.invoiceNumber} not submitted — no ZATCA CSID configured for this tenant`,
+        `Invoice ${invoice.invoiceNumber} not submitted — ZATCA is not configured or this tenant has not completed onboarding`,
       );
       return { submitted: false, reason: 'zatca_not_onboarded' as const };
     }
 
-    // Submission proper is gated on onboarding; see D-029.
-    return { submitted: false, reason: 'zatca_not_onboarded' as const };
+    if (!invoice.zatcaUuid || !invoice.invoiceHash) {
+      return { submitted: false, reason: 'not_issued' as const };
+    }
+
+    if (!invoice.xmlUrl || !this.storage.isEnabled()) {
+      this.logger.error(`Invoice ${invoice.invoiceNumber} has no archived XML to submit`);
+      return { submitted: false, reason: 'archive_unavailable' as const };
+    }
+
+    const invoiceXml = await this.storage.getObject(invoice.xmlUrl);
+    const encryptionKey = this.config.getOrThrow<string>('TOKEN_ENCRYPTION_KEY');
+    const certificatePem = decryptSecret(org.zatcaCsidEncrypted, encryptionKey);
+    const secret = decryptSecret(org.zatcaApiSecretEncrypted, encryptionKey);
+    const credentials = { csid: readCertFacts(certificatePem).certificateDerBase64, secret };
+
+    const request = {
+      invoiceHash: invoice.invoiceHash,
+      invoiceXmlBase64: invoiceXml.toString('base64'),
+    };
+
+    const result =
+      invoice.zatcaInvoiceType === 'simplified'
+        ? await this.apiClient.reportInvoice(credentials, request)
+        : await this.apiClient.clearInvoice(credentials, request);
+
+    const submitted = result.outcome === 'valid' || result.outcome === 'warnings';
+    await this.prisma.invoice.update({
+      where: { id: invoice.id },
+      data: {
+        submissionStatus: submitted
+          ? invoice.zatcaInvoiceType === 'simplified'
+            ? 'reported'
+            : 'cleared'
+          : 'failed',
+        submittedAt: submitted ? new Date() : invoice.submittedAt,
+        clearanceStatus: result.outcome,
+        zatcaResponse: result.raw as Prisma.InputJsonValue,
+      },
+    });
+
+    if (!submitted) {
+      this.logger.error(
+        `ZATCA rejected invoice ${invoice.invoiceNumber}: ${result.errors.map((e) => e.message).join('; ')}`,
+      );
+    }
+
+    return {
+      submitted,
+      outcome: result.outcome,
+      warnings: result.warnings,
+      errors: result.errors,
+    };
   }
 }

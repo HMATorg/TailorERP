@@ -25,6 +25,7 @@
     "@nestjs/platform-express": "^10.4.0",
     "@prisma/client": "^5.19.0",
     "@tailonix/shared": "*",
+    "asn1js": "^3.0.10",
     "bcryptjs": "^2.4.3",
     "bullmq": "^5.12.0",
     "class-transformer": "^0.5.1",
@@ -32,11 +33,13 @@
     "ioredis": "^5.4.1",
     "nodemailer": "^9.0.3",
     "pdfkit": "^0.19.1",
+    "pkijs": "^3.4.0",
     "qrcode": "^1.5.4",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "stripe": "^22.3.2",
-    "web-push": "^3.6.7"
+    "web-push": "^3.6.7",
+    "xml-crypto": "^6.1.2"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.4.0",

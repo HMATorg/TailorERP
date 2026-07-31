@@ -26,7 +26,8 @@
     "alerts": "Stock Alerts",
     "appointments": "Appointments",
     "team": "Team",
-    "stores": "Stores"
+    "stores": "Stores",
+    "settings": "Settings"
   },
   "store": {
     "allStores": "All Stores (HQ Overview)",

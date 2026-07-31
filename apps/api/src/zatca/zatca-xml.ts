@@ -1,3 +1,6 @@
+import { DOMParser } from '@xmldom/xmldom';
+import { C14nCanonicalization } from 'xml-crypto';
+
 /**
  * UBL 2.1 invoice document for ZATCA Fatoora Phase 2.
  *
@@ -175,16 +178,49 @@ ${lines}
 }
 
 /**
- * Canonicalisation before hashing. ZATCA specifies C14N plus removal of the
- * signature-related elements; for our unsigned Phase-2-ready document the
- * meaningful part is stable whitespace, so we normalise line endings and strip
- * trailing spaces rather than pretending to implement full XML-C14N.
+ * Real Canonical XML (D-057), replacing an earlier line-trim approximation.
+ * ZATCA's guideline specifies C14N**11** (http://www.w3.org/2006/12/xml-c14n11);
+ * `xml-crypto`'s `C14nCanonicalization` implements the original C14N 1.0
+ * algorithm (http://www.w3.org/TR/2001/REC-xml-c14n-20010315). The two differ
+ * only in how they handle inherited `xml:base`/`xml:id`/`xml:lang` attributes
+ * across nested elements with a different base URI — an edge case this
+ * document never produces (no `xml:base`, no relative-URI attributes), so the
+ * output is byte-identical for every invoice this system generates. Attribute
+ * ordering, namespace declaration placement, and whitespace normalisation —
+ * the parts that actually matter for a hash to match — are handled correctly
+ * either way.
+ *
+ * `buildUblInvoice()` deliberately never emits `<ext:UBLExtensions>`, the QR
+ * `AdditionalDocumentReference`, or `<ds:Signature>` — Section 5 Step 1 says
+ * to strip those before hashing, and the simplest way to guarantee that is to
+ * never have produced them in the first place. `zatca-sign.ts` splices the
+ * populated signature block into this same canonical XML afterwards to
+ * produce the document that actually gets archived and submitted.
  */
 export function canonicalize(xml: string): string {
+  const doc = new DOMParser().parseFromString(xml, 'text/xml');
+  const c14n = new C14nCanonicalization();
+  return c14n.process(doc.documentElement, {});
+}
+
+/**
+ * The inverse of what `zatca-sign.ts` splices in: removes `<ext:UBLExtensions>`
+ * and the QR `<cac:AdditionalDocumentReference>` from a *signed* invoice,
+ * restoring exactly the pre-signature form `hashInvoiceXml` was computed
+ * against — Section 5 Step 1's "remove tags" step, applied in reverse for
+ * re-verification. `verifyChain()` needs this because the archived document
+ * is the final signed one (the actual submittable file, and what an auditor
+ * would expect to find), not the intermediate unsigned form.
+ *
+ * String-based rather than XPath, because the three elements this removes are
+ * ones this codebase generates itself in a known, single-occurrence shape —
+ * there's no untrusted or attacker-controlled XML being parsed here.
+ */
+export function stripSignatureElements(xml: string): string {
   return xml
-    .replace(/\r\n/g, '\n')
-    .split('\n')
-    .map((line) => line.replace(/\s+$/, ''))
-    .join('\n')
-    .trim();
+    .replace(/<ext:UBLExtensions>[\s\S]*?<\/ext:UBLExtensions>/, '')
+    .replace(
+      /<cac:AdditionalDocumentReference><cbc:ID>QR<\/cbc:ID>[\s\S]*?<\/cac:AdditionalDocumentReference>/,
+      '',
+    );
 }

@@ -228,7 +228,18 @@ model Organization {
   /// ZATCA-issued CSID + private key for cryptographic stamping (encrypted)
   zatcaCsidEncrypted       String? @map("zatca_csid_encrypted")
   zatcaPrivateKeyEncrypted String? @map("zatca_private_key_encrypted")
+  /// The secret ZATCA returns alongside a Compliance/Production CSID — paired
+  /// with the certificate as HTTP Basic Auth against the Reporting/Clearance
+  /// APIs (encrypted, D-057)
+  zatcaApiSecretEncrypted  String? @map("zatca_api_secret_encrypted")
+  /// Onboarding stage of the CSID currently on file: "compliance" (bootstrap
+  /// credential, usable only for compliance-check calls) or "production"
+  /// (usable for real Reporting/Clearance). Null before onboarding starts.
+  /// D-058.
   zatcaEnvironment String?  @map("zatca_environment") @db.VarChar(20)
+  /// ZATCA's own id for the compliance CSID request — required to request
+  /// the Production CSID afterwards (D-058)
+  zatcaComplianceRequestId String? @map("zatca_compliance_request_id")
   defaultCurrency String    @default("SAR") @map("default_currency") @db.VarChar(10)
   timezone        String    @default("Asia/Riyadh") @db.VarChar(50)
   status          OrgStatus @default(active)
