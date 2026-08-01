@@ -1446,3 +1446,52 @@ as filed when it was not.
   configured, Ledger rendering a real, balanced trial balance (55,965.24 = 55,965.24) with a working
   drill-down into real journal-entry lines, and the WhatsApp config modal round-tripping a token
   end-to-end with the encrypted envelope confirmed directly in Postgres.
+
+## D-063: Team onboarding gets a "set password now" mode alongside email invites
+
+- **Trigger:** A screenshot of the Team page's "Invite user" modal with "we need an option to
+  set user mail and password instead of invitation" — a straight admin-onboarding gap, not a
+  bug: the only way to add a team member was an email invite the invitee had to click and accept
+  themselves, with no path for an admin to just hand someone working credentials directly (useful
+  when mail isn't configured yet, or the admin is onboarding someone in person).
+- **Reused the existing endpoint instead of adding one.** `InviteUserDto` gained an optional
+  `password` field (`@IsOptional() @MinLength(8)`); `TeamService.invite()` branches to a new
+  private `createDirectly()` the moment `dto.password` is set, but only *after* running every
+  guard the email-invite path already runs — `assertActorCanGrantHq`, `assertStoresInOrg`,
+  `assertRegionalManagerAllowed`, the duplicate-email check, and the plan seat-limit check. This
+  was a deliberate ordering choice: duplicating those checks inside `createDirectly()` would have
+  let the two paths drift out of sync silently; branching after them means both paths are
+  provably subject to the same policy by construction, not by two independently-maintained copies
+  of it. `createDirectly()` mirrors `acceptInvite()`'s exact `User` + `UserStoreRole` creation
+  shape in one `$transaction`, hashes the password with the same `bcrypt.hash(password, 10)`
+  convention used everywhere else in this codebase, audits as `team.user_created_directly`, and
+  returns `{ id, email, fullName, createdDirectly: true }` — no `Invitation` row is ever created,
+  no email is ever sent.
+- **Frontend: one modal, a mode toggle, not two flows.** `Team.tsx` gained a `Radio.Group`
+  ("Email an invite" / "Set email & password now") rather than a second modal, so the
+  store/role-assignment and HQ-admin fields stay shared between both paths. A `generatePassword()`
+  helper (12 random bytes via `crypto.getRandomValues`, base64, complexity suffix) gives the admin
+  a one-click strong default while still allowing a typed-in password for handing off verbally.
+- **A real bug, caught only by live verification, not by the build or either endpoint's
+  correctness.** The modal's `onCancel` never called `inviteForm.resetFields()` — `Form.useForm()`
+  instances persist field values across a bound `<Form>` element's mount/unmount regardless of the
+  parent `Modal`'s `destroyOnHidden`, so closing the modal after one submission and reopening it
+  for the next person left the *previous* submission's email, full name, and HQ-admin toggle sitting
+  in the form's internal store. The UI looked correct — freshly typed text visibly replaced the
+  input's displayed value — but the actual submitted payload could still carry stale data, confirmed
+  by monkey-patching `XMLHttpRequest.prototype.send` in the browser and inspecting the literal body
+  of a "new" submission: it carried the *first* test's email and name, not the just-typed ones. Pure
+  code review would not have caught this — the bug is invisible in the diff, since nothing about
+  `onCancel: () => { setInviteOpen(false); setOnboardMode('email'); }` looks wrong without knowing
+  AntD's cross-remount value-persistence behavior. Fixed by calling `inviteForm.resetFields()` on
+  both the cancel path and the post-submit success path (which had the identical gap).
+- **Verification:** New `team.service.spec.ts` (8 tests, first spec file for this service) locks in
+  that every pre-existing guard still fires before `createDirectly()` runs, that the password is
+  hashed and never appears in the write payload, and that the email-invite branch is byte-for-byte
+  unaffected when `password` is omitted. Both onboarding modes were driven live in a real browser
+  against the seeded dev database: direct-password creation confirmed via the actual
+  `POST /users/invite` response shape (`createdDirectly: true`) and the new user appearing in the
+  Team table as `Active` immediately with no pending-invitation row; the email-invite path
+  regression-checked afterward and confirmed via the actual invitation response shape
+  (`expiresAt` + `devAcceptToken`, no `createdDirectly`) and the new invite correctly appearing
+  under "Pending invitations" instead.

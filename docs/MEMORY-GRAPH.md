@@ -6,7 +6,7 @@
 > the repo — why something is blocked, what a trap looks like — belongs in the
 > auto-memory directory, not here.
 
-**Parent** `156e6b6` on `main` · **generated** 2026-08-01 12:09Z · staged into the commit being created on top of it
+**Parent** `ae69f2b` on `main` · **generated** 2026-08-01 19:39Z · staged into the commit being created on top of it
 
 _History below runs to the parent; the commit carrying this file is its child._
 
@@ -51,7 +51,7 @@ graph LR
 | App | Package | Dev port | TS/TSX files | Direct deps |
 | --- | --- | --- | --- | --- |
 | `apps/admin` | `@tailonix/admin` | 5173 | 34 | 12 |
-| `apps/api` | `@tailonix/api` | 3000 | 146 | 24 |
+| `apps/api` | `@tailonix/api` | 3000 | 147 | 24 |
 | `apps/platform-admin` | `@tailonix/platform-admin` | 5175 | 15 | 9 |
 | `apps/pos` | `@tailonix/pos` | 5176 | 16 | 14 |
 | `apps/pwa` | `@tailonix/pwa` | 5174 | 15 | 10 |
@@ -116,7 +116,7 @@ graph LR
 
 ## Engineering decisions
 
-62 recorded in `docs/ENGINEERING-DECISIONS.md`. "Cited by" counts source
+63 recorded in `docs/ENGINEERING-DECISIONS.md`. "Cited by" counts source
 files that reference the decision in a comment — an uncited decision is not wrong,
 but it is the first place to look when something has quietly been undone.
 
@@ -184,12 +184,13 @@ but it is the first place to look when something has quietly been undone.
 | `D-060` | Platform Admin finalized — three real bugs, three missing features, and the module's first tests | 23 file(s) |
 | `D-061` | First real deploy attempt exposed five gaps a dev-only setup never surfaces | 1 file(s) |
 | `D-062` | Finalizing admin found the same shape of gap as platform-admin — backend built, no UI | 9 file(s) |
+| `D-063` | Team onboarding gets a "set password now" mode alongside email invites | 1 file(s) |
 
 ## Tests
 
 | Suite | Files | Declared cases |
 | --- | --- | --- |
-| unit | 24 | 269 |
+| unit | 25 | 277 |
 | e2e | 0 | 0 |
 
 Counts are parsed from `it(` / `test(` call sites, so they include any case that is
@@ -199,6 +200,7 @@ currently skipped. They are a shape check, not a substitute for running the suit
 
 | Commit | Date | Subject |
 | --- | --- | --- |
+| `ae69f2b` | 2026-08-01 | Finalize admin: tenant self-serve billing, ledger, invoices list, WhatsApp config (D-062) |
 | `156e6b6` | 2026-08-01 | Add opt-in platform admin bootstrap seed for first production deploy |
 | `25be863` | 2026-08-01 | Fix: reorder-cron's blocking Redis await made the whole API unreachable, not just cron |
 | `f383753` | 2026-08-01 | Document D-061: Railway deployment readiness fixes |

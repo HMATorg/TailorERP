@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
-import { PlusOutlined } from '@ant-design/icons';
+import { PlusOutlined, ReloadOutlined } from '@ant-design/icons';
 import {
   Button,
   Form,
   Input,
   Modal,
   Popconfirm,
+  Radio,
   Select,
   Space,
   Switch,
@@ -35,12 +36,20 @@ interface TeamUser {
   storeRoles: { storeId: string; role: string; store: { name: string } }[];
 }
 
+/** A random, readable password an admin can hand to a new hire directly. */
+function generatePassword(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(12));
+  return btoa(String.fromCharCode(...bytes)).replace(/[+/=]/g, '').slice(0, 14) + 'A1!';
+}
+
 export default function Team() {
   const { stores, user: me } = useAuthStore();
   const [users, setUsers] = useState<TeamUser[]>([]);
   const [invites, setInvites] = useState<Record<string, unknown>[]>([]);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [onboardMode, setOnboardMode] = useState<'email' | 'password'>('email');
+  const [inviteForm] = Form.useForm();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -75,7 +84,7 @@ export default function Team() {
           Team
         </Typography.Title>
         <Button type="primary" icon={<PlusOutlined />} onClick={() => setInviteOpen(true)}>
-          Invite user
+          Add team member
         </Button>
       </Space>
 
@@ -148,8 +157,20 @@ export default function Team() {
         </>
       )}
 
-      <Modal open={inviteOpen} title="Invite user" onCancel={() => setInviteOpen(false)} footer={null} destroyOnHidden width={560}>
+      <Modal
+        open={inviteOpen}
+        title="Add team member"
+        onCancel={() => {
+          setInviteOpen(false);
+          setOnboardMode('email');
+          inviteForm.resetFields();
+        }}
+        footer={null}
+        destroyOnHidden
+        width={560}
+      >
         <Form
+          form={inviteForm}
           layout="vertical"
           initialValues={{ assignments: [{}] }}
           onFinish={async (v) => {
@@ -159,22 +180,63 @@ export default function Team() {
                 fullName: v.fullName || undefined,
                 asHqAdmin: v.asHqAdmin || undefined,
                 assignments: v.asHqAdmin ? undefined : v.assignments,
+                password: onboardMode === 'password' ? v.password : undefined,
               });
-              message.success(
-                data.devAcceptToken
-                  ? `Invitation created — dev accept token: ${data.devAcceptToken.slice(0, 12)}…`
-                  : 'Invitation sent',
-              );
+              if (onboardMode === 'password') {
+                message.success(`Account created for ${v.email} — share the password with them securely.`);
+              } else {
+                message.success(
+                  data.devAcceptToken
+                    ? `Invitation created — dev accept token: ${data.devAcceptToken.slice(0, 12)}…`
+                    : 'Invitation sent',
+                );
+              }
               setInviteOpen(false);
+              setOnboardMode('email');
+              inviteForm.resetFields();
               await load();
             } catch (e) {
               message.error(errMsg(e));
             }
           }}
         >
+          <Form.Item label="Onboarding method">
+            <Radio.Group
+              value={onboardMode}
+              onChange={(e) => setOnboardMode(e.target.value)}
+              options={[
+                { label: 'Email an invite (they choose their own password)', value: 'email' },
+                { label: 'Set email & password now', value: 'password' },
+              ]}
+              optionType="button"
+              block
+            />
+          </Form.Item>
           <Form.Item name="email" label="Email" rules={[{ required: true, type: 'email' }]}>
             <Input />
           </Form.Item>
+          {onboardMode === 'password' && (
+            <Form.Item
+              name="password"
+              label="Password"
+              rules={[{ required: true, min: 8, message: 'At least 8 characters' }]}
+              extra="The account is active immediately — no invitation email is sent. Share this password with them yourself."
+            >
+              <Input.Password
+                visibilityToggle
+                addonAfter={
+                  <Button
+                    type="text"
+                    size="small"
+                    icon={<ReloadOutlined />}
+                    onClick={() => inviteForm.setFieldValue('password', generatePassword())}
+                  >
+                    Generate
+                  </Button>
+                }
+              />
+            </Form.Item>
+          )}
           <Form.Item name="fullName" label="Full name">
             <Input />
           </Form.Item>
@@ -215,7 +277,7 @@ export default function Team() {
             }
           </Form.Item>
           <Button type="primary" htmlType="submit" block style={{ marginBlockStart: 16 }}>
-            Send invitation
+            {onboardMode === 'password' ? 'Create user' : 'Send invitation'}
           </Button>
         </Form>
       </Modal>

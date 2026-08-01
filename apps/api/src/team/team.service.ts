@@ -123,6 +123,10 @@ export class TeamService {
       }
     }
 
+    if (dto.password) {
+      return this.createDirectly(orgId, actorId, dto, assignments, ip);
+    }
+
     const token = randomBytes(32).toString('hex');
     const invitation = await this.prisma.invitation.create({
       data: {
@@ -157,6 +161,59 @@ export class TeamService {
       expiresAt: invitation.expiresAt,
       ...(isDev ? { devAcceptToken: token } : {}),
     };
+  }
+
+  /**
+   * Admin sets the password directly instead of emailing an invite (useful
+   * when mail isn't configured, or the admin is handing credentials to the
+   * new hire in person). Creates the same shape acceptInvite() would have
+   * produced, just without the intermediate Invitation row.
+   */
+  private async createDirectly(
+    orgId: string,
+    actorId: string,
+    dto: InviteUserDto,
+    assignments: StoreAssignmentDto[],
+    ip?: string,
+  ) {
+    const email = dto.email.toLowerCase();
+    const passwordHash = await bcrypt.hash(dto.password as string, 10);
+
+    const user = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.user.create({
+        data: {
+          email,
+          passwordHash,
+          fullName: dto.fullName,
+          phone: dto.phone,
+          organizationId: orgId,
+          orgRole: dto.asHqAdmin ? 'hq_admin' : null,
+        },
+      });
+      if (assignments.length > 0) {
+        await tx.userStoreRole.createMany({
+          data: assignments.map((a) => ({
+            userId: created.id,
+            storeId: a.storeId,
+            role: a.role,
+            permissions: (a.permissions ?? {}) as Prisma.InputJsonValue,
+          })),
+        });
+      }
+      return created;
+    });
+
+    await this.audit.log({
+      organizationId: orgId,
+      actorUserId: actorId,
+      action: 'team.user_created_directly',
+      entityType: 'user',
+      entityId: user.id,
+      newValue: { email, asHqAdmin: dto.asHqAdmin ?? false, assignments },
+      ip,
+    });
+
+    return { id: user.id, email: user.email, fullName: user.fullName, createdDirectly: true };
   }
 
   /** Sends the invite email; delivery problems must not fail the invitation. */

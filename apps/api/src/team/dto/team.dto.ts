@@ -52,6 +52,15 @@ export class InviteUserDto {
   @Type(() => StoreAssignmentDto)
   @IsOptional()
   assignments?: StoreAssignmentDto[];
+
+  /**
+   * When set, the user is created active immediately with this password —
+   * no invitation row, no email. Omit to keep the normal email-invite flow.
+   */
+  @IsString()
+  @IsOptional()
+  @MinLength(8, { message: 'Password must be at least 8 characters' })
+  password?: string;
 }
 
 export class AcceptInviteDto {
