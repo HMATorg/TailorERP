@@ -56,6 +56,7 @@ interface Garment {
   key: string;
   garmentType: string;
   fabricBatchId?: string;
+  customerSuppliesFabric?: boolean;
   collarStyle?: string;
   cuffStyle?: string;
   pocketStyle?: string;
@@ -242,7 +243,7 @@ export default function Counter() {
   const readyToCheckout =
     customer &&
     garments.length > 0 &&
-    garments.every((g) => g.fabricBatchId) &&
+    garments.every((g) => g.customerSuppliesFabric || g.fabricBatchId) &&
     garments.every((g) => yieldByType[g.garmentType] != null);
 
   const checkout = async () => {
@@ -258,7 +259,7 @@ export default function Counter() {
         isUrgent: isUrgent || undefined,
         items: garments.map((g) => ({
           garmentType: g.garmentType,
-          fabricBatchId: g.fabricBatchId,
+          fabricBatchId: g.customerSuppliesFabric ? undefined : g.fabricBatchId,
           collarStyle: g.collarStyle,
           cuffStyle: g.cuffStyle,
           pocketStyle: g.pocketStyle,
@@ -498,13 +499,13 @@ export default function Counter() {
                             <Select
                               size="large"
                               style={{ width: '100%' }}
-                              disabled={!profileFor(g.garmentType)}
+                              disabled={!profileFor(g.garmentType) || g.customerSuppliesFabric}
                               placeholder={
                                 (rollsByType[g.garmentType]?.length ?? 0) > 0
                                   ? 'Select a roll'
                                   : 'No roll can supply this yield'
                               }
-                              value={g.fabricBatchId}
+                              value={g.customerSuppliesFabric ? undefined : g.fabricBatchId}
                               onChange={(v) => update(i, { fabricBatchId: v })}
                               options={(rollsByType[g.garmentType] ?? []).map((r) => ({
                                 value: r.id,
@@ -516,6 +517,18 @@ export default function Counter() {
                                 </Typography.Text>
                               }
                             />
+                            <Checkbox
+                              style={{ marginBlockStart: 8 }}
+                              checked={g.customerSuppliesFabric ?? false}
+                              onChange={(e) =>
+                                update(i, {
+                                  customerSuppliesFabric: e.target.checked,
+                                  fabricBatchId: e.target.checked ? undefined : g.fabricBatchId,
+                                })
+                              }
+                            >
+                              Customer supplies their own fabric — no roll deducted from stock
+                            </Checkbox>
                           </div>
 
                           {garments.length > 1 && (

@@ -277,6 +277,47 @@ describe('POS checkout (e2e)', () => {
     expect(res.body.totalReservedMeters).toBe('2.35');
   });
 
+  it('checks out a garment with no fabricBatchId when the customer supplies their own material (D-064)', async () => {
+    const before = await prisma.inventoryBatch.findUniqueOrThrow({ where: { id: batchId } });
+
+    const res = await request(app.getHttpServer())
+      .post('/api/v1/pos/orders')
+      .set(auth())
+      .send({
+        customerId,
+        items: [{ garmentType: 'Thobe', unitPrice: 400 }],
+      })
+      .expect(201);
+    createdOrderIds.push(res.body.id);
+
+    // The estimate still comes back — useful even with no store fabric involved.
+    expect(res.body.totalReservedMeters).toBe('3.82');
+    expect(res.body.tickets).toHaveLength(1);
+
+    // Nothing touched the roll: no reservation held, no quantity moved.
+    const after = await prisma.inventoryBatch.findUniqueOrThrow({ where: { id: batchId } });
+    expect(after.currentQuantity.toFixed(2)).toBe(before.currentQuantity.toFixed(2));
+    expect(after.reservedQuantity.toFixed(2)).toBe(before.reservedQuantity.toFixed(2));
+
+    const reservations = await prisma.fabricReservation.findMany({
+      where: { orderItem: { orderId: res.body.id } },
+    });
+    expect(reservations).toHaveLength(0);
+
+    // The cutting station has nothing to consume — this must not throw.
+    const ticket = await prisma.productionTicket.findFirstOrThrow({ where: { orderId: res.body.id } });
+    await request(app.getHttpServer())
+      .put(`/api/v1/workshop/tickets/${ticket.id}/station`)
+      .set(auth())
+      .send({ toStation: 'cutting' })
+      .expect(200);
+    await request(app.getHttpServer())
+      .put(`/api/v1/workshop/tickets/${ticket.id}/station`)
+      .set(auth())
+      .send({ toStation: 'stitching' })
+      .expect(200);
+  });
+
   it('deducts fabric only when the ticket leaves the cutting station', async () => {
     const orderId = createdOrderIds[0];
     const ticket = await prisma.productionTicket.findFirstOrThrow({ where: { orderId } });

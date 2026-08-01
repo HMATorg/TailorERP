@@ -1495,3 +1495,47 @@ as filed when it was not.
   regression-checked afterward and confirmed via the actual invitation response shape
   (`expiresAt` + `devAcceptToken`, no `createdDirectly`) and the new invite correctly appearing
   under "Pending invitations" instead.
+
+## D-064: POS checkout let a customer's own fabric block the sale entirely
+
+- **Trigger:** A screenshot of the Counter screen with "No roll can supply this yield" and a
+  disabled Checkout button, with the observation "we cant able to create order without selecting
+  fabric" — a real tailor shop constraint: a large share of customers bring their own cloth, and
+  the POS had no way to represent that at all. Every garment required a store roll, full stop.
+- **The general orders module already got this right; POS didn't.** `CreateOrderItemDto.fabrics`
+  (used by `orders.service.ts`'s `create()`) has always been `@IsOptional()` — omitting it creates
+  a fabric-less order item with nothing reserved. But POS Counter doesn't call that endpoint; it
+  calls `POST /pos/orders`, and `PosGarmentDto.fabricBatchId` was a bare `@IsUUID()` with no
+  `@IsOptional()`. Two DTOs for conceptually the same "what fabric is this garment cut from"
+  field had drifted to enforce different policies, and the one actually wired to the front desk
+  was the strict one.
+- **Fix stayed to the one place that needed it.** `fabricBatchId` is now `@IsOptional()` on
+  `PosGarmentDto`; `pos.service.ts`'s `checkout()` wraps its single `this.reservations.reserve(...)`
+  call in `if (p.item.fabricBatchId)`. Nothing else changed, because nothing else needed to:
+  `OrderItem.yieldMeters` is already computed and stored unconditionally, one line above the
+  reservation call, from the customer's measurements alone — so the "needs 6.12m" estimate stays
+  on the order and on the checkout response (`totalReservedMeters`) whether or not a store roll was
+  ever touched. `ReservationService.consumeForOrderItem()` — called when a ticket reaches the
+  cutting station — already handled zero reservations as its normal empty case (`if (reservations
+  .length === 0) return { consumed: 0 }`), because a cancelled-and-released order item hits that
+  same path; customer-supplied fabric just exercises a branch that already existed for a different
+  reason. No schema change, no new table, no new invariant to maintain — the reservation system was
+  already "hold metres against a roll, or don't," it just wasn't reachable from the counter.
+- **Frontend: one checkbox, not a second flow.** `Counter.tsx` gained a per-garment
+  `customerSuppliesFabric` toggle next to the roll `Select` ("Customer supplies their own fabric —
+  no roll deducted from stock"). Checking it disables the roll picker and clears any prior
+  selection; `readyToCheckout` accepts `g.customerSuppliesFabric || g.fabricBatchId` in place of a
+  bare `g.fabricBatchId` requirement. The yield tag ("needs X m") keeps showing regardless — it's
+  computed from measurements, independent of roll selection, and is exactly the number a cashier
+  needs to tell a customer how much fabric to bring.
+- **Verification:** New e2e case in `pos.e2e-spec.ts` checks out a garment with no `fabricBatchId`
+  at all, confirms `totalReservedMeters` still reflects the yield estimate, confirms zero
+  `FabricReservation` rows are created, confirms the target roll's `currentQuantity`/
+  `reservedQuantity` are untouched, and walks the resulting ticket through `queued → cutting →
+  stitching` to prove the zero-reservation cutting path doesn't throw (19/19 tests passing,
+  `apps/api/test/pos.e2e-spec.ts`). Driven live in a real browser against the seeded dev database
+  both ways: with the box checked, checkout was blocked before the fix (confirmed via
+  `readyToCheckout`'s disabled state) and succeeded after it, with the actual `POST /pos/orders`
+  response carrying a real order, ticket, and ZATCA tax invoice with no `fabricBatchId` in the
+  request; then, as a regression check on the same page, a garment was checked out the original
+  way — a real roll selected, box left unchecked — confirming that path still succeeds unchanged.

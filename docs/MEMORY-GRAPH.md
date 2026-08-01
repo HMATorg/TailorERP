@@ -6,7 +6,7 @@
 > the repo — why something is blocked, what a trap looks like — belongs in the
 > auto-memory directory, not here.
 
-**Parent** `ae69f2b` on `main` · **generated** 2026-08-01 19:39Z · staged into the commit being created on top of it
+**Parent** `15e9417` on `main` · **generated** 2026-08-01 20:07Z · staged into the commit being created on top of it
 
 _History below runs to the parent; the commit carrying this file is its child._
 
@@ -116,7 +116,7 @@ graph LR
 
 ## Engineering decisions
 
-63 recorded in `docs/ENGINEERING-DECISIONS.md`. "Cited by" counts source
+64 recorded in `docs/ENGINEERING-DECISIONS.md`. "Cited by" counts source
 files that reference the decision in a comment — an uncited decision is not wrong,
 but it is the first place to look when something has quietly been undone.
 
@@ -185,6 +185,7 @@ but it is the first place to look when something has quietly been undone.
 | `D-061` | First real deploy attempt exposed five gaps a dev-only setup never surfaces | 1 file(s) |
 | `D-062` | Finalizing admin found the same shape of gap as platform-admin — backend built, no UI | 9 file(s) |
 | `D-063` | Team onboarding gets a "set password now" mode alongside email invites | 1 file(s) |
+| `D-064` | POS checkout let a customer's own fabric block the sale entirely | 1 file(s) |
 
 ## Tests
 
@@ -200,6 +201,7 @@ currently skipped. They are a shape check, not a substitute for running the suit
 
 | Commit | Date | Subject |
 | --- | --- | --- |
+| `15e9417` | 2026-08-02 | Add direct email+password team onboarding alongside email invites (D-063) |
 | `ae69f2b` | 2026-08-01 | Finalize admin: tenant self-serve billing, ledger, invoices list, WhatsApp config (D-062) |
 | `156e6b6` | 2026-08-01 | Add opt-in platform admin bootstrap seed for first production deploy |
 | `25be863` | 2026-08-01 | Fix: reorder-cron's blocking Redis await made the whole API unreachable, not just cron |

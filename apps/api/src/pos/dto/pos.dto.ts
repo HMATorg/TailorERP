@@ -35,9 +35,10 @@ export class PosGarmentDto {
   @MaxLength(100)
   garmentType: string;
 
-  /** The roll this garment is cut from */
+  /** The roll this garment is cut from. Omit when the customer supplies their own fabric. */
   @IsUUID()
-  fabricBatchId: string;
+  @IsOptional()
+  fabricBatchId?: string;
 
   @IsEnum(CollarStyle)
   @IsOptional()

@@ -304,14 +304,19 @@ export class PosService {
           },
         });
 
-        // Hold the fabric — validated against the roll's minimum usable point
-        await this.reservations.reserve(tx, {
-          batchId: p.item.fabricBatchId,
-          orderItemId: orderItem.id,
-          meters: p.yieldMeters,
-          storeId,
-          userId,
-        });
+        // Hold the fabric — validated against the roll's minimum usable point.
+        // Skipped entirely when the customer brought their own material: no
+        // batch to reserve against, and yieldMeters (already stored above)
+        // stays on the order item as the fabric estimate either way.
+        if (p.item.fabricBatchId) {
+          await this.reservations.reserve(tx, {
+            batchId: p.item.fabricBatchId,
+            orderItemId: orderItem.id,
+            meters: p.yieldMeters,
+            storeId,
+            userId,
+          });
+        }
       }
 
       let withDeposit = created;
