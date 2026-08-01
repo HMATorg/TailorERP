@@ -1539,3 +1539,42 @@ as filed when it was not.
   response carrying a real order, ticket, and ZATCA tax invoice with no `fabricBatchId` in the
   request; then, as a regression check on the same page, a garment was checked out the original
   way — a real roll selected, box left unchecked — confirming that path still succeeds unchanged.
+
+## D-065: A brand-new tenant's first cash sale could fail outright
+
+- **Trigger:** A live production report — checkout as an hq_admin failed with "Ledger account
+  'cash_on_hand' is not set up for this tenant" the moment a deposit was taken, even though the
+  garment/fabric side of the same order (D-064's fix) worked fine.
+- **Root cause: chart-of-accounts provisioning was tied to a page visit, not to tenant creation.**
+  `LedgerService.ensureChartOfAccounts()` is idempotent and cheap, but the only caller was
+  `LedgerController`'s `POST /ledger/accounts/bootstrap`, which `apps/admin`'s `Ledger.tsx` calls
+  automatically the first time an hq_admin opens that page (D-062) — a reasonable lazy-init
+  pattern for a page that's easy to stumble into during setup, but nothing forced a new tenant's
+  hq_admin to ever visit it before ringing up their first sale. `PlatformService.createOrganization()`
+  (PA-2 — the actual tenant-provisioning path used to create every production tenant) built the
+  organization, subscription, HQ store, and HQ admin user in one transaction and stopped there.
+  `LedgerService.post()` — called from `postDeposit()`/`postSettlement()` on every checkout that
+  isn't fully unpaid — resolves each posting line's account by `code` and throws a 400 if the
+  account row doesn't exist, which it doesn't for any tenant nobody has opened Ledger for yet. Since
+  `pos.service.ts checkout()` posts the deposit inside its own `$transaction`, that 400 rolled back
+  the *entire* order — no order, no ticket, no invoice — not just the payment.
+- **Fix:** `PlatformService` now takes `LedgerService` (already `@Global()`-exported, no module
+  wiring needed) and calls `this.ledger.ensureChartOfAccounts(org.id)` right after
+  `createOrganization()`'s transaction commits — outside it deliberately, matching this codebase's
+  established pattern of keeping idempotent, recoverable post-commit work (ticket creation, ZATCA
+  issuance in `pos.service.ts`) out of the same transaction as the money-critical writes, so a
+  hiccup provisioning ledger accounts can't roll back an otherwise-successful org creation. Every
+  tenant now has its six standard accounts (`cash_on_hand`, `card_clearing`, `bank`,
+  `unearned_revenue`, `vat_payable`, `sales_revenue`) from the moment it's created; `Ledger.tsx`'s
+  bootstrap-on-first-visit call becomes a no-op for every tenant created from this point forward
+  (`ensureChartOfAccounts` only creates whatever's still missing) and stays in place as a harmless
+  safety net for tenants created before this fix.
+- **The already-affected production tenant needs no code deploy to unblock** — an hq_admin opening
+  Ledger once still triggers the existing bootstrap endpoint and fixes it immediately, which is
+  what was communicated back as the immediate workaround before this fix shipped.
+- **Verification:** New unit test in `platform.service.spec.ts` asserts `ensureChartOfAccounts` is
+  called with the new org's id. Extended the real-database `platform-admin.e2e-spec.ts`'s existing
+  tenant-provisioning test (PA-2) to assert all six account codes exist for the freshly created
+  organization immediately after `POST /admin/organizations` returns — exercising the real DI
+  wiring, not a mock, so a circular-module or injection mistake would have failed loudly rather
+  than passing on a hand-built test double. 285 unit / 52 e2e tests passing.

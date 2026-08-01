@@ -53,9 +53,16 @@ function build() {
   const tokens = { signAccessToken: jest.fn().mockResolvedValue('signed.jwt.token') };
   const featureGate = { invalidate: jest.fn().mockResolvedValue(undefined) };
   const audit = { log: jest.fn().mockResolvedValue(undefined) };
+  const ledger = { ensureChartOfAccounts: jest.fn().mockResolvedValue(6) };
 
-  const service = new PlatformService(prisma as never, tokens as never, featureGate as never, audit as never);
-  return { service, prisma, tokens, featureGate, audit };
+  const service = new PlatformService(
+    prisma as never,
+    tokens as never,
+    featureGate as never,
+    audit as never,
+    ledger as never,
+  );
+  return { service, prisma, tokens, featureGate, audit, ledger };
 }
 
 describe('PlatformService', () => {
@@ -87,7 +94,7 @@ describe('PlatformService', () => {
     });
 
     it('lowercases the HQ admin email and creates org + subscription + HQ store + HQ admin in one transaction', async () => {
-      const { service, prisma, audit } = build();
+      const { service, prisma, audit, ledger } = build();
       (prisma.subscriptionPlan as { findUnique: jest.Mock }).findUnique.mockResolvedValue({
         id: 'plan-1',
         code: 'pro',
@@ -113,6 +120,27 @@ describe('PlatformService', () => {
       expect(audit.log).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'platform.organization_created', organizationId: 'org-1' }),
       );
+    });
+
+    it('provisions the chart of accounts so the tenant can take its first deposit immediately (D-065)', async () => {
+      const { service, prisma, ledger } = build();
+      (prisma.subscriptionPlan as { findUnique: jest.Mock }).findUnique.mockResolvedValue({
+        id: 'plan-1',
+        code: 'pro',
+      });
+      (prisma.user as { findUnique: jest.Mock }).findUnique.mockResolvedValue(null);
+      (prisma.organization as { create: jest.Mock }).create.mockResolvedValue({ id: 'org-1', name: dto.name });
+      (prisma.organizationSubscription as { create: jest.Mock }).create.mockResolvedValue({});
+      (prisma.store as { create: jest.Mock }).create.mockResolvedValue({});
+      (prisma.user as { create: jest.Mock }).create.mockResolvedValue({});
+      (prisma.organization as { findUnique: jest.Mock }).findUnique.mockResolvedValue({
+        id: 'org-1',
+        name: dto.name,
+      });
+
+      await service.createOrganization('actor-1', dto as never);
+
+      expect(ledger.ensureChartOfAccounts).toHaveBeenCalledWith('org-1');
     });
   });
 

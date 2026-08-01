@@ -106,6 +106,14 @@ describe('Platform Admin API (e2e)', () => {
       .send({ email: `e2e-hq-${suffix}@example.test`, password: 'E2ePassw0rd!' })
       .expect(200);
     expect(login.body.user.orgRole).toBe('hq_admin');
+
+    // The chart of accounts must exist from creation, not depend on someone
+    // opening Ledger first — a brand-new tenant's first cash sale used to fail
+    // outright with "Ledger account 'cash_on_hand' is not set up" (D-065).
+    const accounts = await prisma.ledgerAccount.findMany({ where: { organizationId: res.body.id } });
+    expect(accounts.map((a) => a.code).sort()).toEqual(
+      ['bank', 'card_clearing', 'cash_on_hand', 'sales_revenue', 'unearned_revenue', 'vat_payable'].sort(),
+    );
   });
 
   it('rejects a duplicate HQ admin email', async () => {

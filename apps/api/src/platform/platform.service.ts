@@ -8,6 +8,7 @@ import * as bcrypt from 'bcryptjs';
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { TokenService } from '../auth/token.service';
+import { LedgerService } from '../ledger/ledger.service';
 import { FeatureGateService } from './feature-gate.service';
 import type {
   ChangeSubscriptionDto,
@@ -33,6 +34,7 @@ export class PlatformService {
     private readonly tokens: TokenService,
     private readonly featureGate: FeatureGateService,
     private readonly audit: AuditService,
+    private readonly ledger: LedgerService,
   ) {}
 
   // ── Organizations (PA-1, PA-2, PA-4) ──
@@ -117,6 +119,14 @@ export class PlatformService {
       });
       return created;
     });
+
+    // Every tenant needs its chart of accounts before its first cash sale, not
+    // whenever an hq_admin happens to open Ledger for the first time — that gap
+    // let a brand-new tenant's very first deposit fail the whole checkout with
+    // "Ledger account 'cash_on_hand' is not set up for this tenant" (D-065).
+    // Idempotent and outside the transaction: a failure here must not roll back
+    // an otherwise-successful org creation.
+    await this.ledger.ensureChartOfAccounts(org.id);
 
     await this.audit.log({
       organizationId: org.id,
