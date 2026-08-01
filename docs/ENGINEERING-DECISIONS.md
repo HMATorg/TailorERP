@@ -1380,3 +1380,69 @@ as filed when it was not.
   invented or guessed; those remain unset, and the features that need them degrade the way D-020
   and D-029 already designed them to — a 503 on billing routes, `zatca_not_onboarded` on submit —
   rather than crashing.
+
+## D-062: Finalizing admin found the same shape of gap as platform-admin — backend built, no UI
+
+- **Trigger:** "now it's time to work on admin" — the same systematic audit that finalized
+  platform-admin (D-060), applied to `apps/admin`. Cross-referencing its page list against every
+  backend module in `AppModule` found three fully-built, correctly-permissioned backend surfaces
+  with no admin UI at all, plus one route family gated to the wrong audience entirely.
+- **Billing was not "missing a page," it was gated to the wrong people.** `BillingController`'s
+  checkout/portal/invoices routes — the actual Stripe self-serve flows — sat behind
+  `PlatformAdminGuard`, so a tenant's own hq_admin could not see their plan, self-upgrade, open the
+  Stripe customer portal, or view their invoice history; every billing action required going
+  through Tailonix's own platform-admin team on the tenant's behalf. This is a business-model
+  question, not an engineering one, so it was put to the user directly rather than guessed at
+  (self-serve vs. staying sales-assisted) before touching anything — resolved in favor of
+  self-serve. **Existing platform-admin routes/guards are untouched**; a new `TenantBillingController`
+  (`@Controller('billing')`, no `:id` param — always `principal.orgId!`) reuses the same
+  `StripeService` methods. `createCheckoutSession`/`createPortalSession` gained optional
+  `successUrl`/`cancelUrl`/`returnUrl`/`actorType` parameters, defaulting to the exact URLs and
+  `actorType: 'platform_admin'` they already used, so the platform-admin path is provably
+  unchanged; the tenant path passes its own admin-app URLs and `actorType: 'staff'`.
+- **The double-entry ledger (D-036/D-037) had zero UI since the day it was built.**
+  `LedgerController`'s trial-balance and per-account statement endpoints were already gated by the
+  ordinary `view_dashboard` permission — tenant-accessible from day one — but nothing in
+  `apps/admin` ever called them. New `Ledger.tsx` reads both, plus calls the idempotent
+  `POST /ledger/accounts/bootstrap` automatically on first visit if the chart of accounts doesn't
+  exist yet for that tenant, so there's no separate manual setup step.
+- **Invoices had an endpoint but no browsable history.** `GET /invoices` already existed
+  (`view_orders`-gated) and was reachable exactly once — `OrderDetail`'s single-order reprint
+  button. New `InvoicesList.tsx` is the first place a tenant can see every invoice at once.
+- **WhatsApp — D-015's "primary" notification channel — had no way to ever be configured.**
+  `Store.whatsappPhoneNumberId`/`whatsappAccessTokenEncrypted` existed in the schema and were read
+  by `notification.worker.ts`/`whatsapp.service.ts`, but neither `stores.dto.ts` nor any frontend
+  ever exposed a write path — the only way to set them was a raw database write. Added both fields
+  to `UpdateStoreDto`, gated by the existing `manage_stores` permission (an extension of ordinary
+  store editing, not a new org-wide setting like the other three). The token is encrypted with the
+  same `encryptSecret`/`TOKEN_ENCRYPTION_KEY` pattern already used for ZATCA credentials before it
+  touches the database, and **no read path returns it in any form** — `sanitizeStore()` strips
+  `whatsappAccessTokenEncrypted` from every `StoresService` response and replaces it with a derived
+  `whatsappConfigured: boolean`, verified by an e2e test that greps the full JSON response body (not
+  just individual fields) for the plaintext token after a real write, and separately confirms the
+  database row holds an AES-256-GCM envelope rather than the plaintext.
+- **A real crash, caught by live verification, not by review.** The WhatsApp status label's guard
+  was `editing !== 'new'` — true when `editing === null` too, since `null !== 'new'`. Opening the
+  "Add store" modal (`editing` starts `null`) hit `(null as StoreRow).whatsappConfigured` and
+  white-screened the entire page with no error boundary to catch it. Found by actually opening the
+  modal in a real browser during verification, not by code review — the bug was invisible in the
+  diff because `editing !== 'new'` reads as a correct-looking guard unless you separately hold in
+  mind that `editing`'s type is `StoreRow | 'new' | null`, three states, not two. Fixed to
+  `editing && editing !== 'new'`, which also lets TypeScript narrow `editing` to `StoreRow` in the
+  branch without the `as StoreRow` casts the buggy version needed. Locked in with a regression test
+  that renders the real component and opens the real modal, specifically because a shallow test
+  asserting only the fixed behavior wouldn't have caught the same bug returning in a different form.
+- **Verification:** `apps/api` unit suite grew to 276 tests (new: `stores.service.spec.ts` from
+  zero, plus additions to `stripe.service.spec.ts` and `billing.controller.spec.ts` for the tenant
+  controller and the new optional redirect/actorType parameters). A new `billing.e2e-spec.ts`
+  (51 total e2e tests project-wide) exercises the `manage_organization` gate with a real hq_admin
+  vs. a real store_manager token — not just the guard's unit-level logic — and the WhatsApp
+  round-trip against a live database. `apps/admin` gained Vitest + Testing Library from zero
+  (mirroring D-060's platform-admin setup exactly: jsdom `matchMedia` polyfill, test files excluded
+  from the production `tsconfig.json` via a separate `tsconfig.vitest.json`), covering the
+  previously-untested auth/refresh interceptor chain and the Stores crash regression. Every new
+  page was also driven live in a real browser against the seeded dev database — Billing showing a
+  real Enterprise subscription and correctly 503-ing "Manage billing" with no `STRIPE_SECRET_KEY`
+  configured, Ledger rendering a real, balanced trial balance (55,965.24 = 55,965.24) with a working
+  drill-down into real journal-entry lines, and the WhatsApp config modal round-tripping a token
+  end-to-end with the encrypted envelope confirmed directly in Postgres.

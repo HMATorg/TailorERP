@@ -27,7 +27,10 @@
     "appointments": "اپائنٹمنٹس",
     "team": "ٹیم",
     "stores": "برانچز",
-    "settings": "ترتیبات"
+    "settings": "ترتیبات",
+    "invoices": "انوائسز",
+    "billing": "بلنگ",
+    "ledger": "لیجر"
   },
   "store": {
     "allStores": "تمام برانچز (مجموعی جائزہ)",

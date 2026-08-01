@@ -74,12 +74,20 @@ export class StripeService implements OnModuleInit {
     return customer.id;
   }
 
-  /** Hosted Checkout session for a plan (PA-6). */
+  /**
+   * Hosted Checkout session for a plan (PA-6). `successUrl`/`cancelUrl`/`actorType`
+   * default to the platform-admin-mediated flow (redirects into apps/platform-admin,
+   * audited as `platform_admin`); a tenant self-serve caller passes its own return
+   * URLs (back into apps/admin) and `actorType: 'staff'` instead.
+   */
   async createCheckoutSession(params: {
     organizationId: string;
     planCode: string;
     interval: 'monthly' | 'yearly';
     actorId: string;
+    actorType?: 'staff' | 'platform_admin';
+    successUrl?: string;
+    cancelUrl?: string;
   }) {
     const plan = await this.prisma.subscriptionPlan.findUnique({
       where: { code: params.planCode },
@@ -101,8 +109,8 @@ export class StripeService implements OnModuleInit {
       mode: 'subscription',
       customer: customerId,
       line_items: [{ price: priceId, quantity: 1 }],
-      success_url: `${baseUrl}/tenants/${params.organizationId}?checkout=success`,
-      cancel_url: `${baseUrl}/tenants/${params.organizationId}?checkout=cancelled`,
+      success_url: params.successUrl ?? `${baseUrl}/tenants/${params.organizationId}?checkout=success`,
+      cancel_url: params.cancelUrl ?? `${baseUrl}/tenants/${params.organizationId}?checkout=cancelled`,
       // Echoed back on the webhook so we can map the subscription to a tenant
       subscription_data: {
         metadata: { organizationId: params.organizationId, planId: plan.id },
@@ -113,7 +121,7 @@ export class StripeService implements OnModuleInit {
     await this.audit.log({
       organizationId: params.organizationId,
       actorUserId: params.actorId,
-      actorType: 'platform_admin',
+      actorType: params.actorType ?? 'platform_admin',
       action: 'billing.checkout_created',
       entityType: 'organization',
       entityId: params.organizationId,
@@ -122,13 +130,17 @@ export class StripeService implements OnModuleInit {
     return { url: session.url, sessionId: session.id };
   }
 
-  /** Stripe-hosted billing portal for self-service plan changes (TRD §8.2). */
-  async createPortalSession(organizationId: string) {
+  /**
+   * Stripe-hosted billing portal for self-service plan changes (TRD §8.2).
+   * `returnUrl` defaults to the platform-admin tenant-detail page; a tenant
+   * self-serve caller passes its own admin-app URL instead.
+   */
+  async createPortalSession(organizationId: string, returnUrl?: string) {
     const customerId = await this.ensureCustomer(organizationId);
     const baseUrl = this.config.get<string>('PLATFORM_APP_URL', 'http://localhost:5175');
     const session = await this.client().billingPortal.sessions.create({
       customer: customerId,
-      return_url: `${baseUrl}/tenants/${organizationId}`,
+      return_url: returnUrl ?? `${baseUrl}/tenants/${organizationId}`,
     });
     return { url: session.url };
   }
@@ -163,6 +175,22 @@ export class StripeService implements OnModuleInit {
       hostedInvoiceUrl: inv.hosted_invoice_url,
       invoicePdf: inv.invoice_pdf,
     }));
+  }
+
+  /** The calling org's own subscription, for tenant self-serve billing. */
+  async getOwnSubscription(organizationId: string) {
+    return this.prisma.organizationSubscription.findUnique({
+      where: { organizationId },
+      include: { plan: true },
+    });
+  }
+
+  /** Plans a tenant is allowed to self-serve into — excludes custom/enterprise-only plans. */
+  listPublicPlans() {
+    return this.prisma.subscriptionPlan.findMany({
+      where: { isPublic: true },
+      orderBy: { maxStores: 'asc' },
+    });
   }
 
   verifyWebhook(rawBody: Buffer, signature: string): Stripe.Event {

@@ -2,8 +2,11 @@ import { useMemo } from 'react';
 import {
   AppstoreOutlined,
   BellOutlined,
+  BookOutlined,
   CalendarOutlined,
+  CreditCardOutlined,
   DashboardOutlined,
+  FileTextOutlined,
   InboxOutlined,
   LogoutOutlined,
   SafetyCertificateOutlined,
@@ -37,10 +40,13 @@ export default function AppLayout() {
       { key: '/inventory', icon: <InboxOutlined />, label: <Link to="/inventory">{t('nav.inventory')}</Link> },
       { key: '/alerts', icon: <WarningOutlined />, label: <Link to="/alerts">{t('nav.alerts')}</Link> },
       { key: '/appointments', icon: <CalendarOutlined />, label: <Link to="/appointments">{t('nav.appointments')}</Link> },
+      { key: '/invoices', icon: <FileTextOutlined />, label: <Link to="/invoices">{t('nav.invoices')}</Link> },
       ...(isHq
         ? [
             { key: '/team', icon: <TeamOutlined />, label: <Link to="/team">{t('nav.team')}</Link> },
             { key: '/stores', icon: <ShopOutlined />, label: <Link to="/stores">{t('nav.stores')}</Link> },
+            { key: '/billing', icon: <CreditCardOutlined />, label: <Link to="/billing">{t('nav.billing')}</Link> },
+            { key: '/ledger', icon: <BookOutlined />, label: <Link to="/ledger">{t('nav.ledger')}</Link> },
             {
               key: '/settings',
               icon: <SafetyCertificateOutlined />,

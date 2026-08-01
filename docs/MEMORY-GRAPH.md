@@ -6,7 +6,7 @@
 > the repo — why something is blocked, what a trap looks like — belongs in the
 > auto-memory directory, not here.
 
-**Parent** `25be863` on `main` · **generated** 2026-08-01 07:40Z · staged into the commit being created on top of it
+**Parent** `156e6b6` on `main` · **generated** 2026-08-01 12:09Z · staged into the commit being created on top of it
 
 _History below runs to the parent; the commit carrying this file is its child._
 
@@ -50,8 +50,8 @@ graph LR
 
 | App | Package | Dev port | TS/TSX files | Direct deps |
 | --- | --- | --- | --- | --- |
-| `apps/admin` | `@tailonix/admin` | 5173 | 27 | 12 |
-| `apps/api` | `@tailonix/api` | 3000 | 144 | 24 |
+| `apps/admin` | `@tailonix/admin` | 5173 | 34 | 12 |
+| `apps/api` | `@tailonix/api` | 3000 | 146 | 24 |
 | `apps/platform-admin` | `@tailonix/platform-admin` | 5175 | 15 | 9 |
 | `apps/pos` | `@tailonix/pos` | 5176 | 16 | 14 |
 | `apps/pwa` | `@tailonix/pwa` | 5174 | 15 | 10 |
@@ -116,7 +116,7 @@ graph LR
 
 ## Engineering decisions
 
-61 recorded in `docs/ENGINEERING-DECISIONS.md`. "Cited by" counts source
+62 recorded in `docs/ENGINEERING-DECISIONS.md`. "Cited by" counts source
 files that reference the decision in a comment — an uncited decision is not wrong,
 but it is the first place to look when something has quietly been undone.
 
@@ -157,8 +157,8 @@ but it is the first place to look when something has quietly been undone.
 | `D-033` | POS checkout is one call, not a wizard of independent endpoints | — |
 | `D-034` | The POS is a separate app, not a section of the admin SPA | — |
 | `D-035` | Returning a pre-update row printed the wrong balance | — |
-| `D-036` | The blueprint states the deposit posting backwards | 3 file(s) |
-| `D-037` | VAT on split payments is a remainder, not a per-payment split | 1 file(s) |
+| `D-036` | The blueprint states the deposit posting backwards | 4 file(s) |
+| `D-037` | VAT on split payments is a remainder, not a per-payment split | 2 file(s) |
 | `D-038` | Document numbers need an atomic counter, not `count(*) + 1` | 3 file(s) |
 | `D-039` | `FOR UPDATE` on the latest row does not serialise inserts | 1 file(s) |
 | `D-040` | Arabic invoices need a font, not a shaping engine | 2 file(s) |
@@ -179,16 +179,17 @@ but it is the first place to look when something has quietly been undone.
 | `D-055` | Five more Thobe measurement points, a cut-style/cufflink spec, and an urgent flag — read off a real tailor shop's own paper order form | 8 file(s) |
 | `D-056` | The measurement diagram moved every hotspot off the garment into labelled columns | — |
 | `D-057` | ZATCA Phase 2 — real XAdES signing, CSR generation, and the Reporting/Clearance client | 12 file(s) |
-| `D-058` | ZATCA onboarding orchestration — three explicit steps, a permission that didn't exist, and one deliberate non-feature | 8 file(s) |
+| `D-058` | ZATCA onboarding orchestration — three explicit steps, a permission that didn't exist, and one deliberate non-feature | 9 file(s) |
 | `D-059` | A real ZATCA primary source arrived — corrects the CSR structure, the wire shapes, and renewal | 4 file(s) |
 | `D-060` | Platform Admin finalized — three real bugs, three missing features, and the module's first tests | 23 file(s) |
 | `D-061` | First real deploy attempt exposed five gaps a dev-only setup never surfaces | 1 file(s) |
+| `D-062` | Finalizing admin found the same shape of gap as platform-admin — backend built, no UI | 9 file(s) |
 
 ## Tests
 
 | Suite | Files | Declared cases |
 | --- | --- | --- |
-| unit | 23 | 247 |
+| unit | 24 | 269 |
 | e2e | 0 | 0 |
 
 Counts are parsed from `it(` / `test(` call sites, so they include any case that is
@@ -198,6 +199,7 @@ currently skipped. They are a shape check, not a substitute for running the suit
 
 | Commit | Date | Subject |
 | --- | --- | --- |
+| `156e6b6` | 2026-08-01 | Add opt-in platform admin bootstrap seed for first production deploy |
 | `25be863` | 2026-08-01 | Fix: reorder-cron's blocking Redis await made the whole API unreachable, not just cron |
 | `f383753` | 2026-08-01 | Document D-061: Railway deployment readiness fixes |
 | `ec7e69d` | 2026-08-01 | Make the API and all four SPAs deployable on Railway (D-061) |

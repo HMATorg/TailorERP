@@ -32,6 +32,8 @@ interface StoreRow {
   isHeadquarters: boolean;
   status: 'active' | 'paused' | 'closed';
   operatingHours: Record<string, { open: string; close: string }>;
+  whatsappPhoneNumberId: string | null;
+  whatsappConfigured: boolean;
 }
 
 export default function Stores() {
@@ -133,6 +135,11 @@ export default function Stores() {
               isHeadquarters: v.isHeadquarters ?? false,
               ...(editing !== 'new' ? { status: v.status } : {}),
               operatingHours,
+              ...(v.whatsappPhoneNumberId !== undefined && {
+                whatsappPhoneNumberId: v.whatsappPhoneNumberId || undefined,
+              }),
+              // Blank means "leave the current token alone" — only send it when typed.
+              ...(v.whatsappAccessToken && { whatsappAccessToken: v.whatsappAccessToken }),
             };
             try {
               if (editing === 'new') await api.post('/stores', body);
@@ -177,6 +184,26 @@ export default function Stores() {
               <Select options={['active', 'paused', 'closed'].map((s) => ({ value: s }))} />
             </Form.Item>
           )}
+          <Typography.Text strong>
+            WhatsApp{' '}
+            {editing && editing !== 'new' && (
+              <Typography.Text type={editing.whatsappConfigured ? 'success' : 'secondary'}>
+                — {editing.whatsappConfigured ? 'configured' : 'not configured'}
+              </Typography.Text>
+            )}
+          </Typography.Text>
+          <Row gutter={12} style={{ marginBlockStart: 8, marginBlockEnd: editing === 'new' ? 24 : 8 }}>
+            <Col span={12}>
+              <Form.Item name="whatsappPhoneNumberId" label="Phone Number ID">
+                <Input placeholder="From the WhatsApp Cloud API app" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="whatsappAccessToken" label="Access token">
+                <Input.Password placeholder={(editing as StoreRow)?.whatsappConfigured ? 'Leave blank to keep current' : 'Paste token'} />
+              </Form.Item>
+            </Col>
+          </Row>
           <Typography.Text strong>Operating hours</Typography.Text>
           <Row gutter={[8, 4]} style={{ marginBlockStart: 8 }}>
             {DAYS.map((d) => (

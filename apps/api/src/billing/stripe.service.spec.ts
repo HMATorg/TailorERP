@@ -49,8 +49,8 @@ function subscriptionFixture(overrides: {
 
 describe('StripeService', () => {
   let prisma: {
-    subscriptionPlan: { findFirst: jest.Mock; findUnique: jest.Mock };
-    organizationSubscription: { upsert: jest.Mock };
+    subscriptionPlan: { findFirst: jest.Mock; findUnique: jest.Mock; findMany: jest.Mock };
+    organizationSubscription: { upsert: jest.Mock; findUnique: jest.Mock };
     organization: { findUnique: jest.Mock; update: jest.Mock };
     user: { findFirst: jest.Mock };
   };
@@ -60,8 +60,8 @@ describe('StripeService', () => {
 
   beforeEach(() => {
     prisma = {
-      subscriptionPlan: { findFirst: jest.fn(), findUnique: jest.fn() },
-      organizationSubscription: { upsert: jest.fn().mockResolvedValue({}) },
+      subscriptionPlan: { findFirst: jest.fn(), findUnique: jest.fn(), findMany: jest.fn() },
+      organizationSubscription: { upsert: jest.fn().mockResolvedValue({}), findUnique: jest.fn() },
       organization: { findUnique: jest.fn(), update: jest.fn() },
       user: { findFirst: jest.fn() },
     };
@@ -237,6 +237,122 @@ describe('StripeService', () => {
           invoicePdf: 'https://stripe.example/inv_1.pdf',
         },
       ]);
+    });
+  });
+
+  describe('getOwnSubscription / listPublicPlans (D-062 tenant self-serve)', () => {
+    it('reads the subscription scoped to exactly the given org, with its plan', async () => {
+      const sub = { organizationId: 'org-1', status: 'active', plan: { code: 'pro' } };
+      prisma.organizationSubscription.findUnique.mockResolvedValue(sub);
+
+      const result = await service.getOwnSubscription('org-1');
+
+      expect(prisma.organizationSubscription.findUnique).toHaveBeenCalledWith({
+        where: { organizationId: 'org-1' },
+        include: { plan: true },
+      });
+      expect(result).toBe(sub);
+    });
+
+    it('returns null when the org has no subscription row yet', async () => {
+      prisma.organizationSubscription.findUnique.mockResolvedValue(null);
+      expect(await service.getOwnSubscription('org-1')).toBeNull();
+    });
+
+    it('lists only public plans — a tenant must never self-serve into a custom/enterprise-only plan', async () => {
+      prisma.subscriptionPlan.findMany.mockResolvedValue([{ code: 'basic' }, { code: 'pro' }]);
+
+      const result = await service.listPublicPlans();
+
+      expect(prisma.subscriptionPlan.findMany).toHaveBeenCalledWith({
+        where: { isPublic: true },
+        orderBy: { maxStores: 'asc' },
+      });
+      expect(result).toEqual([{ code: 'basic' }, { code: 'pro' }]);
+    });
+  });
+
+  describe('createCheckoutSession / createPortalSession — caller-supplied redirects (D-062)', () => {
+    beforeEach(() => {
+      prisma.organization.findUnique.mockResolvedValue({
+        id: 'org-1',
+        name: 'Org',
+        stripeCustomerId: 'cus_123',
+      });
+      (service as unknown as { config: { get: jest.Mock } }).config = {
+        get: jest.fn().mockReturnValue('http://localhost:5175'),
+      };
+    });
+
+    it('defaults to the platform-admin tenant page and actorType platform_admin when not overridden', async () => {
+      prisma.subscriptionPlan.findUnique.mockResolvedValue({
+        code: 'pro',
+        stripeMonthlyPriceId: 'price_1',
+      });
+      const create = jest.fn().mockResolvedValue({ id: 'cs_1', url: 'https://stripe.example/checkout' });
+      (service as unknown as { stripe: { checkout: { sessions: { create: typeof create } } } }).stripe = {
+        checkout: { sessions: { create } },
+      };
+
+      await service.createCheckoutSession({
+        organizationId: 'org-1',
+        planCode: 'pro',
+        interval: 'monthly',
+        actorId: 'actor-1',
+      });
+
+      const args = create.mock.calls[0][0];
+      expect(args.success_url).toContain('/tenants/org-1?checkout=success');
+      expect(args.cancel_url).toContain('/tenants/org-1?checkout=cancelled');
+      expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ actorType: 'platform_admin' }));
+    });
+
+    it('uses the caller-supplied URLs and actorType when a tenant self-serves', async () => {
+      prisma.subscriptionPlan.findUnique.mockResolvedValue({
+        code: 'pro',
+        stripeMonthlyPriceId: 'price_1',
+      });
+      const create = jest.fn().mockResolvedValue({ id: 'cs_1', url: 'https://stripe.example/checkout' });
+      (service as unknown as { stripe: { checkout: { sessions: { create: typeof create } } } }).stripe = {
+        checkout: { sessions: { create } },
+      };
+
+      await service.createCheckoutSession({
+        organizationId: 'org-1',
+        planCode: 'pro',
+        interval: 'monthly',
+        actorId: 'actor-1',
+        actorType: 'staff',
+        successUrl: 'https://admin.example/billing?checkout=success',
+        cancelUrl: 'https://admin.example/billing?checkout=cancelled',
+      });
+
+      const args = create.mock.calls[0][0];
+      expect(args.success_url).toBe('https://admin.example/billing?checkout=success');
+      expect(args.cancel_url).toBe('https://admin.example/billing?checkout=cancelled');
+      expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ actorType: 'staff' }));
+    });
+
+    it('portal defaults to the platform-admin tenant page when no returnUrl is given', async () => {
+      const create = jest.fn().mockResolvedValue({ url: 'https://stripe.example/portal' });
+      (service as unknown as { stripe: { billingPortal: { sessions: { create: typeof create } } } }).stripe = {
+        billingPortal: { sessions: { create } },
+      };
+
+      await service.createPortalSession('org-1');
+
+      expect(create.mock.calls[0][0].return_url).toContain('/tenants/org-1');
+    });
+
+    it('portal uses the caller-supplied returnUrl when given', async () => {
+      const create = jest.fn().mockResolvedValue({ url: 'https://stripe.example/portal' });
+      (service as unknown as { stripe: { billingPortal: { sessions: { create: typeof create } } } }).stripe = {
+        billingPortal: { sessions: { create } },
+      };
+
+      await service.createPortalSession('org-1', 'https://admin.example/billing');
+
+      expect(create.mock.calls[0][0].return_url).toBe('https://admin.example/billing');
     });
   });
 });

@@ -27,7 +27,10 @@
     "appointments": "المواعيد",
     "team": "الفريق",
     "stores": "الفروع",
-    "settings": "الإعدادات"
+    "settings": "الإعدادات",
+    "invoices": "الفواتير",
+    "billing": "الفوترة",
+    "ledger": "دفتر الأستاذ"
   },
   "store": {
     "allStores": "جميع الفروع (نظرة عامة)",

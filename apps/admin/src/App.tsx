@@ -4,10 +4,13 @@ import AcceptInvite from './pages/AcceptInvite';
 import Alerts from './pages/Alerts';
 import Appointments from './pages/Appointments';
 import BatchDetail from './pages/BatchDetail';
+import Billing from './pages/Billing';
 import Customers from './pages/Customers';
 import Dashboard from './pages/Dashboard';
 import Impersonate from './pages/Impersonate';
 import Inventory from './pages/Inventory';
+import InvoicesList from './pages/InvoicesList';
+import Ledger from './pages/Ledger';
 import Login from './pages/Login';
 import NewOrder from './pages/NewOrder';
 import OrderDetail from './pages/OrderDetail';
@@ -33,8 +36,11 @@ export default function App() {
           <Route path="/inventory/:id" element={<BatchDetail />} />
           <Route path="/alerts" element={<Alerts />} />
           <Route path="/appointments" element={<Appointments />} />
+          <Route path="/invoices" element={<InvoicesList />} />
           <Route path="/team" element={<Team />} />
           <Route path="/stores" element={<Stores />} />
+          <Route path="/billing" element={<Billing />} />
+          <Route path="/ledger" element={<Ledger />} />
           <Route path="/settings" element={<Settings />} />
         </Route>
       </Routes>

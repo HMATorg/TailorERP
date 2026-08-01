@@ -27,7 +27,10 @@
     "appointments": "Appointments",
     "team": "Team",
     "stores": "Stores",
-    "settings": "Settings"
+    "settings": "Settings",
+    "invoices": "Invoices",
+    "billing": "Billing",
+    "ledger": "Ledger"
   },
   "store": {
     "allStores": "All Stores (HQ Overview)",

@@ -5,17 +5,30 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import type { Prisma } from '@prisma/client';
+import { ConfigService } from '@nestjs/config';
+import type { Prisma, Store } from '@prisma/client';
 import { AuditService } from '../audit/audit.service';
+import { encryptSecret } from '../notifications/crypto.util';
 import { PrismaService } from '../prisma/prisma.service';
 import type { AccessTokenPayload } from '../auth/auth.types';
 import type { CreateStoreDto, UpdateStoreDto } from './dto/store.dto';
+
+/**
+ * Never let the encrypted WhatsApp token blob leave the API — the client has
+ * no use for ciphertext it can't decrypt, and there's no reason to hand it
+ * out. `whatsappConfigured` tells the UI whether one is on file at all.
+ */
+function sanitizeStore(store: Store) {
+  const { whatsappAccessTokenEncrypted, ...rest } = store;
+  return { ...rest, whatsappConfigured: whatsappAccessTokenEncrypted != null };
+}
 
 @Injectable()
 export class StoresService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly config: ConfigService,
   ) {}
 
   /** Stores visible to the current staff member (HQ admin: all; others: assigned). */
@@ -30,16 +43,18 @@ export class StoresService {
     if (!user || !user.isActive) throw new ForbiddenException('Account is inactive');
 
     if (user.orgRole === 'hq_admin') {
-      return this.prisma.store.findMany({
+      const stores = await this.prisma.store.findMany({
         where: { organizationId: principal.orgId },
         orderBy: [{ isHeadquarters: 'desc' }, { name: 'asc' }],
       });
+      return stores.map(sanitizeStore);
     }
     const storeIds = user.storeRoles.map((r) => r.storeId);
-    return this.prisma.store.findMany({
+    const stores = await this.prisma.store.findMany({
       where: { id: { in: storeIds } },
       orderBy: { name: 'asc' },
     });
+    return stores.map(sanitizeStore);
   }
 
   async create(orgId: string, actorId: string, dto: CreateStoreDto, ip?: string) {
@@ -82,10 +97,19 @@ export class StoresService {
       newValue: { name: store.name },
       ip,
     });
-    return store;
+    return sanitizeStore(store);
   }
 
   async getById(orgId: string, storeId: string) {
+    const store = await this.prisma.store.findFirst({
+      where: { id: storeId, organizationId: orgId },
+    });
+    if (!store) throw new NotFoundException('Store not found');
+    return sanitizeStore(store);
+  }
+
+  /** Raw row, including the encrypted token — only for server-side use (notification.worker.ts). */
+  private async getByIdRaw(orgId: string, storeId: string) {
     const store = await this.prisma.store.findFirst({
       where: { id: storeId, organizationId: orgId },
     });
@@ -94,7 +118,7 @@ export class StoresService {
   }
 
   async update(orgId: string, actorId: string, storeId: string, dto: UpdateStoreDto, ip?: string) {
-    const existing = await this.getById(orgId, storeId);
+    const existing = await this.getByIdRaw(orgId, storeId);
     const store = await this.prisma.store.update({
       where: { id: storeId },
       data: {
@@ -107,6 +131,15 @@ export class StoresService {
         ...(dto.isHeadquarters !== undefined && { isHeadquarters: dto.isHeadquarters }),
         ...(dto.operatingHours !== undefined && {
           operatingHours: dto.operatingHours as Prisma.InputJsonValue,
+        }),
+        ...(dto.whatsappPhoneNumberId !== undefined && {
+          whatsappPhoneNumberId: dto.whatsappPhoneNumberId,
+        }),
+        ...(dto.whatsappAccessToken !== undefined && {
+          whatsappAccessTokenEncrypted: encryptSecret(
+            dto.whatsappAccessToken,
+            this.config.getOrThrow<string>('TOKEN_ENCRYPTION_KEY'),
+          ),
         }),
       },
     });
@@ -121,6 +154,6 @@ export class StoresService {
       newValue: { name: store.name, status: store.status },
       ip,
     });
-    return store;
+    return sanitizeStore(store);
   }
 }

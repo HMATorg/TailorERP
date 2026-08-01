@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import { BadRequestException } from '@nestjs/common';
 import type { Request } from 'express';
-import { BillingController, StripeWebhookController } from './billing.controller';
+import { BillingController, StripeWebhookController, TenantBillingController } from './billing.controller';
 import type { AccessTokenPayload } from '../auth/auth.types';
 
 /**
@@ -57,6 +57,69 @@ describe('BillingController', () => {
   function build() {
     return buildBillingController();
   }
+});
+
+/**
+ * TenantBillingController (D-062) — the tenant self-serve counterpart to
+ * BillingController above: same Stripe flows, scoped to the caller's own
+ * org (principal.orgId) instead of a route param + PlatformAdminGuard.
+ * Worth locking in specifically: it always operates on the CALLER's org,
+ * never a param an attacker could swap for another tenant's, and it passes
+ * its own admin-app return URLs plus actorType 'staff' rather than the
+ * platform-admin defaults.
+ */
+describe('TenantBillingController', () => {
+  function build() {
+    const stripe = {
+      createCheckoutSession: jest.fn(),
+      createPortalSession: jest.fn(),
+      listInvoices: jest.fn(),
+      listPublicPlans: jest.fn(),
+      getOwnSubscription: jest.fn(),
+    };
+    const config = { get: jest.fn().mockReturnValue('https://admin.example') };
+    const controller = new TenantBillingController(stripe as never, config as never);
+    const principal = { sub: 'user-1', typ: 'staff', orgId: 'org-caller' } as AccessTokenPayload;
+    return { controller, stripe, principal };
+  }
+
+  it('plans delegates with no args', () => {
+    const { controller, stripe } = build();
+    controller.plans();
+    expect(stripe.listPublicPlans).toHaveBeenCalledWith();
+  });
+
+  it('subscription reads the caller\'s own org, never a param', () => {
+    const { controller, stripe, principal } = build();
+    controller.subscription(principal);
+    expect(stripe.getOwnSubscription).toHaveBeenCalledWith('org-caller');
+  });
+
+  it('checkout scopes to the caller\'s org, tags actorType staff, and points back at the admin app', () => {
+    const { controller, stripe, principal } = build();
+    controller.checkout(principal, { planCode: 'pro', interval: 'monthly' });
+    expect(stripe.createCheckoutSession).toHaveBeenCalledWith({
+      organizationId: 'org-caller',
+      planCode: 'pro',
+      interval: 'monthly',
+      actorId: 'user-1',
+      actorType: 'staff',
+      successUrl: 'https://admin.example/billing?checkout=success',
+      cancelUrl: 'https://admin.example/billing?checkout=cancelled',
+    });
+  });
+
+  it('portal scopes to the caller\'s org and returns to the admin app, not the platform-admin default', () => {
+    const { controller, stripe, principal } = build();
+    controller.portal(principal);
+    expect(stripe.createPortalSession).toHaveBeenCalledWith('org-caller', 'https://admin.example/billing');
+  });
+
+  it('invoices scopes to the caller\'s org and coerces the limit query string', () => {
+    const { controller, stripe, principal } = build();
+    controller.invoices(principal, '5');
+    expect(stripe.listInvoices).toHaveBeenCalledWith('org-caller', 5);
+  });
 });
 
 describe('StripeWebhookController', () => {
