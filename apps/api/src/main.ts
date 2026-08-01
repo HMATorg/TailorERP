@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
+import { seedPlatformAdminIfConfigured } from './bootstrap/seed-platform-admin';
 
 async function bootstrap() {
   // rawBody is required for WhatsApp/Stripe webhook signature verification
@@ -24,6 +25,8 @@ async function bootstrap() {
     credentials: true,
   });
   app.enableShutdownHooks();
+
+  await seedPlatformAdminIfConfigured(app);
 
   const port = Number(process.env.PORT ?? 3000);
   await app.listen(port);

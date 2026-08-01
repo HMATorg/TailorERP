@@ -6,7 +6,7 @@
 > the repo — why something is blocked, what a trap looks like — belongs in the
 > auto-memory directory, not here.
 
-**Parent** `f383753` on `main` · **generated** 2026-07-31 22:04Z · staged into the commit being created on top of it
+**Parent** `25be863` on `main` · **generated** 2026-08-01 07:40Z · staged into the commit being created on top of it
 
 _History below runs to the parent; the commit carrying this file is its child._
 
@@ -51,7 +51,7 @@ graph LR
 | App | Package | Dev port | TS/TSX files | Direct deps |
 | --- | --- | --- | --- | --- |
 | `apps/admin` | `@tailonix/admin` | 5173 | 27 | 12 |
-| `apps/api` | `@tailonix/api` | 3000 | 143 | 24 |
+| `apps/api` | `@tailonix/api` | 3000 | 144 | 24 |
 | `apps/platform-admin` | `@tailonix/platform-admin` | 5175 | 15 | 9 |
 | `apps/pos` | `@tailonix/pos` | 5176 | 16 | 14 |
 | `apps/pwa` | `@tailonix/pwa` | 5174 | 15 | 10 |
@@ -182,7 +182,7 @@ but it is the first place to look when something has quietly been undone.
 | `D-058` | ZATCA onboarding orchestration — three explicit steps, a permission that didn't exist, and one deliberate non-feature | 8 file(s) |
 | `D-059` | A real ZATCA primary source arrived — corrects the CSR structure, the wire shapes, and renewal | 4 file(s) |
 | `D-060` | Platform Admin finalized — three real bugs, three missing features, and the module's first tests | 23 file(s) |
-| `D-061` | First real deploy attempt exposed five gaps a dev-only setup never surfaces | — |
+| `D-061` | First real deploy attempt exposed five gaps a dev-only setup never surfaces | 1 file(s) |
 
 ## Tests
 
@@ -198,6 +198,7 @@ currently skipped. They are a shape check, not a substitute for running the suit
 
 | Commit | Date | Subject |
 | --- | --- | --- |
+| `25be863` | 2026-08-01 | Fix: reorder-cron's blocking Redis await made the whole API unreachable, not just cron |
 | `f383753` | 2026-08-01 | Document D-061: Railway deployment readiness fixes |
 | `ec7e69d` | 2026-08-01 | Make the API and all four SPAs deployable on Railway (D-061) |
 | `09e38cc` | 2026-08-01 | Finalize Platform Admin: fix 3 real bugs, add account management/metrics/billing history, full test coverage (D-060) |
