@@ -1650,3 +1650,53 @@ as filed when it was not.
   the former via a captured `by-code` network request and the rendered `Descriptions` modal, the
   latter via a second real `page.pdf()` capture showing the barcode now sitting entirely inside the
   tag's dashed border.
+
+## D-067: Production Redis was never actually reachable — silently, since the first deploy
+
+- **Trigger:** A user report of "multiple errors in live production" — a wave of 401s (an
+  unrelated, ordinary access-token-expiry pattern, not investigated further) and a 500 on
+  `GET /inventory/alerts` specifically. Chasing the 500 by reading real deploy logs
+  (`get-logs`, not guessing from the stack trace shape) surfaced the actual condition: `[ioredis]
+  Unhandled error event: AggregateError [ECONNREFUSED] … connect ECONNREFUSED ::1:6379` repeating
+  every ~2 seconds since the deployment booted.
+- **Root cause: `REDIS_HOST` was never set on the production `api` service at all.**
+  `RedisModule`, both BullMQ queues/workers, and the reorder cron each default to `localhost` when
+  the env var is absent (`config.get<string>('REDIS_HOST', 'localhost')`) — a sensible default for
+  local dev against docker-compose, catastrophic in a container with no local Redis. `list-variables`
+  on the live `api` service confirmed zero `REDIS_*` keys existed, and the project's service list
+  confirmed no Redis service was ever provisioned — Railway's project sits at exactly 5 services
+  (Postgres, api, admin, pos, platform-admin), the same Hobby-plan cap this project hit once before
+  and resolved by removing the `pwa` service (D-061-adjacent history). D-088's "provision Redis"
+  task was apparently never actually completed in production, or a Redis service that once existed
+  there was later removed to stay under the cap — either way, every deploy since has been silently
+  degraded, not failing loudly, because `/health` correctly reports `redis: "down"` but still
+  returns HTTP 200 (`status: "degraded"`, not 503), so nothing in Railway's own healthcheck (which
+  only checks the HTTP status code) ever flagged it.
+- **Blast radius was wider than the one 500 that got reported.** Every Redis-touching path shares
+  this failure mode: `FeatureGateService.assertFeature()` (any inventory/billing/workshop route
+  gated by plan feature — `/inventory/alerts` was just the one caught in the act), customer OTP
+  login (`otp.service.ts`, PWA), and every BullMQ queue/worker — WhatsApp delivery, email digests,
+  web push, the hourly reorder-check cron. None of these throw a *visible* error to a user in most
+  cases (BullMQ's offline queue just buffers jobs indefinitely against an unreachable connection,
+  silently, rather than rejecting), which is exactly why this went unnoticed since the very first
+  production deploy rather than being caught by "Deploy all 5 services and monitor until green"
+  (D-090-adjacent) — a job silently queued forever looks identical to a job about to run soon.
+- **Fix has two parts, deliberately kept separate.** (1) A genuine infrastructure gap — chose to
+  ask the user rather than silently provision a paid service, since Railway's service-count cap is
+  exactly the constraint they'd already personally navigated once; resolved with an external
+  Upstash Redis (free tier), which doesn't count against Railway's service cap at all and needs no
+  code changes to how the app is deployed — only environment variables. (2) A genuine code gap: none
+  of the four independent Redis-connection call sites supported TLS, which Upstash's native Redis
+  protocol requires. Extracted the previously-duplicated `{host, port, password}` object literal
+  (present separately in `RedisModule`, `notifications.module.ts`'s queue factory, `reorder-
+  cron.service.ts`, and `notification.worker.ts` — the exact shape of duplication D-085 already grew
+  once without being consolidated) into one `redisConnectionOptions()` helper, adding `tls: {}` when
+  a new `REDIS_TLS=true` flag is set. Local/docker-compose dev is untouched — `REDIS_TLS` defaults
+  unset, so the connection shape is byte-identical to before for every existing environment; only
+  the one new managed-Redis case opts in.
+- **Verification:** 285 unit / 52 e2e tests pass unchanged against the local, non-TLS docker-compose
+  Redis, confirming the refactor didn't alter existing connection behavior. `REDIS_HOST` /
+  `REDIS_PORT` / `REDIS_PASSWORD` / `REDIS_TLS` set directly on the production `api` service via the
+  Railway API (`skipDeploys: true`, so setting them doesn't race a separate deploy trigger) ahead of
+  pushing this commit, so the redeploy this push triggers picks up the new code and the new
+  connection target in the same build — not two deploys where the first would still fail.

@@ -1,6 +1,7 @@
 import { Global, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
+import { redisConnectionOptions } from './redis-connection';
 
 export const REDIS_CLIENT = 'REDIS_CLIENT';
 
@@ -12,9 +13,7 @@ export const REDIS_CLIENT = 'REDIS_CLIENT';
       inject: [ConfigService],
       useFactory: (config: ConfigService) =>
         new Redis({
-          host: config.get<string>('REDIS_HOST', 'localhost'),
-          port: config.get<number>('REDIS_PORT', 6379),
-          password: config.get<string>('REDIS_PASSWORD') || undefined,
+          ...redisConnectionOptions(config),
           maxRetriesPerRequest: 3,
           lazyConnect: false,
         }),

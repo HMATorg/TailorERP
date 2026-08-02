@@ -9,6 +9,7 @@ import { Job, Worker } from 'bullmq';
 import { InvoicesService } from '../invoices/invoices.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { FeatureGateService } from '../platform/feature-gate.service';
+import { redisConnectionOptions } from '../redis/redis-connection';
 import { PushService } from './push.service';
 import { QUEUE_NAMES, type NotificationJob, type OrderStatusChangedJob } from './queues';
 import { WhatsappService } from './whatsapp.service';
@@ -63,11 +64,7 @@ export class NotificationWorker implements OnModuleInit, OnModuleDestroy {
       QUEUE_NAMES.whatsapp,
       (job) => this.route(job as Job<NotificationJob>),
       {
-        connection: {
-          host: this.config.get<string>('REDIS_HOST', 'localhost'),
-          port: this.config.get<number>('REDIS_PORT', 6379),
-          password: this.config.get<string>('REDIS_PASSWORD') || undefined,
-        },
+        connection: redisConnectionOptions(this.config),
         concurrency: 5,
       },
     );

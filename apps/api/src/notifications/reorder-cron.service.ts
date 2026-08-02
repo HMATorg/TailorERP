@@ -8,6 +8,7 @@ import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 import { Queue, Worker } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
+import { redisConnectionOptions } from '../redis/redis-connection';
 import { lowStockDigest } from './email-templates';
 import { MailerService } from './mailer.service';
 import { QUEUE_NAMES } from './queues';
@@ -32,11 +33,7 @@ export class ReorderCronService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   async onModuleInit() {
-    const connection = {
-      host: this.config.get<string>('REDIS_HOST', 'localhost'),
-      port: this.config.get<number>('REDIS_PORT', 6379),
-      password: this.config.get<string>('REDIS_PASSWORD') || undefined,
-    };
+    const connection = redisConnectionOptions(this.config);
     this.queue = new Queue(QUEUE_NAMES.cron, { connection });
     // Deliberately not awaited: without a reachable Redis this call sits in
     // ioredis's offline queue indefinitely, and Nest awaits onModuleInit

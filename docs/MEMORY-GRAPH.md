@@ -6,7 +6,7 @@
 > the repo — why something is blocked, what a trap looks like — belongs in the
 > auto-memory directory, not here.
 
-**Parent** `86afe0d` on `main` · **generated** 2026-08-02 11:19Z · staged into the commit being created on top of it
+**Parent** `539cbb7` on `main` · **generated** 2026-08-02 20:44Z · staged into the commit being created on top of it
 
 _History below runs to the parent; the commit carrying this file is its child._
 
@@ -51,7 +51,7 @@ graph LR
 | App | Package | Dev port | TS/TSX files | Direct deps |
 | --- | --- | --- | --- | --- |
 | `apps/admin` | `@tailonix/admin` | 5173 | 34 | 12 |
-| `apps/api` | `@tailonix/api` | 3000 | 147 | 24 |
+| `apps/api` | `@tailonix/api` | 3000 | 148 | 24 |
 | `apps/platform-admin` | `@tailonix/platform-admin` | 5175 | 15 | 9 |
 | `apps/pos` | `@tailonix/pos` | 5176 | 20 | 14 |
 | `apps/pwa` | `@tailonix/pwa` | 5174 | 15 | 10 |
@@ -116,7 +116,7 @@ graph LR
 
 ## Engineering decisions
 
-66 recorded in `docs/ENGINEERING-DECISIONS.md`. "Cited by" counts source
+67 recorded in `docs/ENGINEERING-DECISIONS.md`. "Cited by" counts source
 files that reference the decision in a comment — an uncited decision is not wrong,
 but it is the first place to look when something has quietly been undone.
 
@@ -188,6 +188,7 @@ but it is the first place to look when something has quietly been undone.
 | `D-064` | POS checkout let a customer's own fabric block the sale entirely | 1 file(s) |
 | `D-065` | A brand-new tenant's first cash sale could fail outright | 3 file(s) |
 | `D-066` | POS audit — Workshop cards didn't open, garment tags didn't print, every role saw every screen | 2 file(s) |
+| `D-067` | Production Redis was never actually reachable — silently, since the first deploy | — |
 
 ## Tests
 
@@ -203,6 +204,7 @@ currently skipped. They are a shape check, not a substitute for running the suit
 
 | Commit | Date | Subject |
 | --- | --- | --- |
+| `539cbb7` | 2026-08-02 | Audit and finalize POS module: Workshop clicks, garment-tag print, role-aware nav (D-066) |
 | `86afe0d` | 2026-08-02 | Provision the chart of accounts at tenant creation, not on first Ledger visit (D-065) |
 | `d773289` | 2026-08-02 | Allow POS checkout without a fabric roll for customer-supplied material (D-064) |
 | `15e9417` | 2026-08-02 | Add direct email+password team onboarding alongside email invites (D-063) |
