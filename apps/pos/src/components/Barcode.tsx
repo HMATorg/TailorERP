@@ -13,10 +13,13 @@ export default function Barcode({
   value,
   height = 36,
   fontSize = 12,
+  width = 2,
 }: {
   value: string;
   height?: number;
   fontSize?: number;
+  /** Narrow-bar (module) width in px — JsBarcode's own default is 2. */
+  width?: number;
 }) {
   const ref = useRef<SVGSVGElement>(null);
 
@@ -26,10 +29,11 @@ export default function Barcode({
       format: 'CODE128',
       height,
       fontSize,
+      width,
       margin: 2,
       displayValue: true,
     });
-  }, [value, height, fontSize]);
+  }, [value, height, fontSize, width]);
 
   return <svg ref={ref} />;
 }

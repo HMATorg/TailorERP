@@ -1,5 +1,5 @@
 import axios, { AxiosError, type InternalAxiosRequestConfig } from 'axios';
-import { garmentFamily } from '@tailonix/shared';
+import { garmentFamily, type Permission } from '@tailonix/shared';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
@@ -13,6 +13,15 @@ export interface StoreSummary {
   id: string;
   name: string;
   isHeadquarters?: boolean;
+  /**
+   * Effective permissions for THIS store (role defaults + per-user grant/revoke
+   * overrides), computed server-side and shipped at login so the client can hide
+   * what a user cannot do instead of rendering controls that just 403 — a
+   * tailor has no till (`use_pos`), a cashier has no workshop access
+   * (`view_workshop`), neither has `pos_settle`. The API still enforces this
+   * independently; this is for navigation, never a substitute for the guard.
+   */
+  permissions?: Permission[];
 }
 
 export interface OrganizationSummary {
@@ -83,6 +92,11 @@ export const useAuth = create<AuthState>()(
     { name: 'tailonix-pos-auth' },
   ),
 );
+
+/** The active store's effective permission set — [] while nothing is selected yet. */
+export function useActivePermissions(): Permission[] {
+  return useAuth((s) => s.stores.find((store) => store.id === s.activeStoreId)?.permissions ?? []);
+}
 
 api.interceptors.request.use((config) => {
   const { accessToken, activeStoreId } = useAuth.getState();

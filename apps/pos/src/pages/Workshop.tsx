@@ -173,7 +173,13 @@ export default function Workshop() {
               {col.tickets.length === 0 && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Empty" />}
               <Space direction="vertical" style={{ width: '100%' }} size={8}>
                 {col.tickets.map((t) => (
-                  <Card key={t.id} size="small" hoverable styles={{ body: { padding: 10 } }}>
+                  <Card
+                    key={t.id}
+                    size="small"
+                    hoverable
+                    styles={{ body: { padding: 10 } }}
+                    onClick={() => void scan(t.ticketCode)}
+                  >
                     <Space direction="vertical" size={2} style={{ width: '100%' }}>
                       <Space style={{ justifyContent: 'space-between', width: '100%' }}>
                         <Typography.Text strong style={{ fontSize: 15 }}>
@@ -203,7 +209,10 @@ export default function Workshop() {
                           size="small"
                           block
                           style={{ marginBlockStart: 4 }}
-                          onClick={() => void move(t)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void move(t);
+                          }}
                         >
                           → {NEXT[t.station]}
                         </Button>

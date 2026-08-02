@@ -10,7 +10,7 @@ import {
   useLocation,
   useNavigate,
 } from 'react-router-dom';
-import { errMsg, useAuth } from './api';
+import { errMsg, useActivePermissions, useAuth } from './api';
 import Counter from './pages/Counter';
 import OrderDetail from './pages/OrderDetail';
 import Orders from './pages/Orders';
@@ -66,15 +66,27 @@ function Login() {
 
 function Shell() {
   const { accessToken, user, stores, activeStoreId, setStore, logout } = useAuth();
+  const permissions = useActivePermissions();
   const navigate = useNavigate();
   const location = useLocation();
   if (!accessToken) return <Navigate to="/login" replace />;
+
+  // The backend already refuses these routes without the matching permission
+  // (use_pos / view_workshop) — a tailor has no till, a cashier has no
+  // workshop access (packages/shared/src/permissions.ts). Hiding the tab and
+  // redirecting away from a direct URL keeps that role boundary from reading
+  // as a broken page full of 403 toasts.
+  const canUsePos = permissions.includes('use_pos');
+  const canViewWorkshop = permissions.includes('view_workshop');
 
   const mode = location.pathname.startsWith('/workshop')
     ? 'workshop'
     : location.pathname.startsWith('/orders')
       ? 'orders'
       : 'counter';
+
+  if (mode === 'counter' && !canUsePos) return <Navigate to="/orders" replace />;
+  if (mode === 'workshop' && !canViewWorkshop) return <Navigate to="/orders" replace />;
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
@@ -100,10 +112,10 @@ function Shell() {
               navigate(v === 'workshop' ? '/workshop' : v === 'orders' ? '/orders' : '/')
             }
             options={[
-              { value: 'counter', label: 'Counter', icon: <ShopOutlined /> },
+              canUsePos && { value: 'counter', label: 'Counter', icon: <ShopOutlined /> },
               { value: 'orders', label: 'Orders', icon: <UnorderedListOutlined /> },
-              { value: 'workshop', label: 'Workshop', icon: <ScissorOutlined /> },
-            ]}
+              canViewWorkshop && { value: 'workshop', label: 'Workshop', icon: <ScissorOutlined /> },
+            ].filter(Boolean) as { value: string; label: string; icon: JSX.Element }[]}
           />
         </Space>
         <Space>

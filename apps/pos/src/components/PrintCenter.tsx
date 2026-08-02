@@ -199,7 +199,12 @@ export default function PrintCenter({ data }: { data: PrintCenterData }) {
               {data.customerName}
               {data.dueDate ? ` · due ${new Date(data.dueDate).toLocaleDateString()}` : ''}
             </div>
-            <Barcode value={t.ticketCode} height={30} fontSize={10} />
+            {/* Narrower bar width (JsBarcode's default of 2px renders a 13-char
+                ORD-NNNNNN-NN code at ~338px, wider than a 62mm label's ~212px
+                printable area and visibly overflowing the tag's border) —
+                1px keeps it comfortably scannable by a cheap 1D scanner while
+                fitting within the label. */}
+            <Barcode value={t.ticketCode} height={30} fontSize={10} width={1} />
           </div>
         ))}
       </div>

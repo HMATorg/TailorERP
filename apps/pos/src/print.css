@@ -105,4 +105,13 @@
     font-size: 9px;
     line-height: 1.4;
   }
+  /* Safety net, not the primary fix (see Barcode's width prop in
+     PrintCenter.tsx) — JsBarcode sets a matching viewBox, so this scales the
+     barcode proportionally rather than clipping it if a future ticket-code
+     format ever runs long enough to still not fit at the tuned bar width. */
+  .garment-tag svg {
+    display: block;
+    max-width: 100%;
+    height: auto;
+  }
 }

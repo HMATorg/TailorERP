@@ -18,7 +18,7 @@ import {
   message,
 } from 'antd';
 import { useNavigate, useParams } from 'react-router-dom';
-import { api, errMsg } from '../api';
+import { api, errMsg, useActivePermissions } from '../api';
 import PrintCenter, { type PrintCenterData } from '../components/PrintCenter';
 
 interface OrderDetailData {
@@ -55,6 +55,8 @@ const money = (v: string | number) => Number(v).toFixed(2);
 export default function OrderDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const permissions = useActivePermissions();
+  const canSettle = permissions.includes('pos_settle');
   const [order, setOrder] = useState<OrderDetailData | null>(null);
   const [loading, setLoading] = useState(true);
   const [amount, setAmount] = useState<number>(0);
@@ -191,6 +193,14 @@ export default function OrderDetail() {
 
             <Col xs={24} md={12}>
               {balance > 0 && order.status !== 'cancelled' ? (
+                !canSettle ? (
+                  <Alert
+                    type="warning"
+                    showIcon
+                    message={`SAR ${money(balance)} outstanding`}
+                    description="Ask a cashier or manager to collect this payment."
+                  />
+                ) : (
                 <Card size="small" title="Collect payment">
                   <Space direction="vertical" style={{ width: '100%' }}>
                     <InputNumber
@@ -225,6 +235,7 @@ export default function OrderDetail() {
                     </Button>
                   </Space>
                 </Card>
+                )
               ) : (
                 <Alert type="success" showIcon message="No outstanding balance" />
               )}

@@ -1578,3 +1578,75 @@ as filed when it was not.
   organization immediately after `POST /admin/organizations` returns — exercising the real DI
   wiring, not a mock, so a circular-module or injection mistake would have failed loudly rather
   than passing on a hand-built test double. 285 unit / 52 e2e tests passing.
+
+## D-066: POS audit — Workshop cards didn't open, garment tags didn't print, every role saw every screen
+
+- **Trigger:** Two concrete bug reports (Workshop's ticket cards did nothing when clicked; the
+  printed garment tag's barcode ran off the edge of the label) plus an explicit instruction to
+  audit the whole POS module for onboarding-readiness — the same systematic treatment already
+  given to platform-admin (D-060) and admin (D-062).
+- **Workshop Kanban cards had no `onClick` at all.** `hoverable` on the ticket `Card` makes it
+  *look* clickable (cursor + shadow), but the only interactive element inside was the "→ next
+  station" button, which advanced the ticket immediately with no way to see order/customer/
+  measurement detail first — exactly the modal `scan()` already builds for a barcode scan, just
+  never wired to a click. Fixed by calling `scan(t.ticketCode)` from the card's `onClick`, reusing
+  the barcode-scan code path byte-for-byte rather than duplicating its `Descriptions` layout, and
+  adding `e.stopPropagation()` to the move button so clicking it doesn't also trigger the card's
+  own click and pop the detail modal on top of a station change.
+- **The garment tag print bug was two separable things, confirmed by capturing the real
+  `page.pdf()` output** (`apps/pos/scripts/verify-print-center.mjs`, D-043's discipline, not a
+  screenshot of the on-screen confirmation) **rather than guessing from the CSS.** Extracting the
+  actual PDF `MediaBox` proved the custom `@page { size: 62mm 100mm }` *was* being honored exactly
+  (175.92×282.96pt = 62.06×99.83mm) — the "huge blank page" read from the rendered preview was an
+  artifact of how the preview tool displays a small physical page, not a real bug. The real,
+  measured bug: `JsBarcode` renders `<svg width height>` sized to its own content with no CSS
+  constraint, and a 13–14 character `ORD-NNNNNN-NN` ticket code at JsBarcode's default bar width
+  (2px/module) produces a 338px-wide barcode inside a label with only ~212px of printable width
+  after margins — a fixed, measured 126px overflow past the tag's dashed border on every single
+  tag, not an edge case. Fixed by adding a `width` prop to `Barcode` (default 2, unchanged for any
+  other caller) and passing `width={1}` from the garment-tag usage specifically — chosen instead of
+  CSS-scaling the existing render down, because compressing an already-generated barcode via
+  `max-width: 100%` would also compress its narrowest bar below what "the cheap USB/Bluetooth 1D
+  scanners common on a workshop floor" (the component's own stated design constraint) can read
+  reliably; regenerating it at a smaller module width keeps every bar at a real, scannable size
+  instead of a shrunk one. A `max-width: 100%; height: auto` CSS rule stays as a safety net for a
+  future ticket-code format long enough to still not fit — JsBarcode sets a matching `viewBox`, so
+  that scales proportionally rather than clipping.
+- **The audit's real finding: this app has no concept of role.** The backend has always refused
+  `/pos/*` without `use_pos` and `/workshop/*` without `view_workshop` — a `tailor` has "no till", a
+  `cashier` has "no workshop" (both comments already in `packages/shared/src/permissions.ts`, not
+  new policy) — and the login response has always shipped each store's effective permission array
+  specifically "so a client can hide what the user cannot do, instead of rendering buttons that
+  403" (the comment already in `auth.service.ts`, unused until now). But `apps/pos`'s `AuthState`
+  only ever captured `{id, name, isHeadquarters}` per store, dropping the `permissions` array the
+  backend was already computing and sending — the same field `apps/admin` also doesn't use, so this
+  wasn't a POS-specific oversight, just one the POS app's role mix (tailor/cashier/store_manager)
+  actually exercises. Every session this project has run so far tested as `owner`/`cashier` — a
+  full-permission or near-full-permission account — so the shell's Counter/Orders/Workshop tabs
+  always showing everything and OrderDetail's "Collect payment" panel always rendering never
+  surfaced as wrong. A real tailor login would have hit a Counter page that 403s on its first
+  request, and any role without `pos_settle` would see a working-looking Settle button that fails
+  on submit.
+- **Fix: capture and use what the backend already sends, nothing new to compute.** `StoreSummary`
+  gained an optional `permissions?: Permission[]` field and a `useActivePermissions()` selector
+  hook. `App.tsx`'s `Shell` filters the nav `Segmented` options by `use_pos`/`view_workshop` and
+  redirects away from `/` or `/workshop` to `/orders` (universally granted — every default role has
+  `view_orders`) if the active store's permissions don't cover the route, so a restricted user lands
+  somewhere useful instead of a page that's about to 403. `OrderDetail.tsx`'s payment panel now
+  checks `pos_settle`: without it, a read-only "SAR X outstanding — ask a cashier or manager"
+  notice replaces the interactive form. The guard is UI-only and intentionally redundant with the
+  server's own `@RequirePermissions` — exactly the "for the UI, never a substitute for the guard"
+  boundary the backend comment already stated.
+- **Verification:** Vitest set up for `apps/pos` from zero, mirroring D-060/D-062's admin/
+  platform-admin setup exactly (jsdom `matchMedia` polyfill, `tsconfig.vitest.json` excluding test
+  files from the production build). New `App.test.tsx` (4 cases) and `OrderDetail.test.tsx`
+  (2 cases) lock in the tab-visibility and route-redirect behavior per role and the settle-panel
+  gating. Driven live in a real browser as three separate accounts against the seeded dev database:
+  a `tailor` login redirected straight to Orders with no Counter tab and a read-only balance notice
+  on an unpaid order; a `cashier` login showed Counter+Orders with no Workshop tab, was redirected
+  away from `/workshop` typed directly into the address bar, and still had full, working settle
+  access (no regression); an `owner` (hq_admin, all permissions) saw all three tabs. The Workshop
+  card-click fix and the barcode-overflow fix were each confirmed against the real running app —
+  the former via a captured `by-code` network request and the rendered `Descriptions` modal, the
+  latter via a second real `page.pdf()` capture showing the barcode now sitting entirely inside the
+  tag's dashed border.

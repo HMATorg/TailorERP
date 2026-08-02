@@ -6,7 +6,7 @@
 > the repo — why something is blocked, what a trap looks like — belongs in the
 > auto-memory directory, not here.
 
-**Parent** `d773289` on `main` · **generated** 2026-08-01 20:24Z · staged into the commit being created on top of it
+**Parent** `86afe0d` on `main` · **generated** 2026-08-02 11:19Z · staged into the commit being created on top of it
 
 _History below runs to the parent; the commit carrying this file is its child._
 
@@ -53,7 +53,7 @@ graph LR
 | `apps/admin` | `@tailonix/admin` | 5173 | 34 | 12 |
 | `apps/api` | `@tailonix/api` | 3000 | 147 | 24 |
 | `apps/platform-admin` | `@tailonix/platform-admin` | 5175 | 15 | 9 |
-| `apps/pos` | `@tailonix/pos` | 5176 | 16 | 14 |
+| `apps/pos` | `@tailonix/pos` | 5176 | 20 | 14 |
 | `apps/pwa` | `@tailonix/pwa` | 5174 | 15 | 10 |
 
 ## API modules
@@ -116,7 +116,7 @@ graph LR
 
 ## Engineering decisions
 
-65 recorded in `docs/ENGINEERING-DECISIONS.md`. "Cited by" counts source
+66 recorded in `docs/ENGINEERING-DECISIONS.md`. "Cited by" counts source
 files that reference the decision in a comment — an uncited decision is not wrong,
 but it is the first place to look when something has quietly been undone.
 
@@ -187,6 +187,7 @@ but it is the first place to look when something has quietly been undone.
 | `D-063` | Team onboarding gets a "set password now" mode alongside email invites | 1 file(s) |
 | `D-064` | POS checkout let a customer's own fabric block the sale entirely | 1 file(s) |
 | `D-065` | A brand-new tenant's first cash sale could fail outright | 3 file(s) |
+| `D-066` | POS audit — Workshop cards didn't open, garment tags didn't print, every role saw every screen | 2 file(s) |
 
 ## Tests
 
@@ -202,6 +203,7 @@ currently skipped. They are a shape check, not a substitute for running the suit
 
 | Commit | Date | Subject |
 | --- | --- | --- |
+| `86afe0d` | 2026-08-02 | Provision the chart of accounts at tenant creation, not on first Ledger visit (D-065) |
 | `d773289` | 2026-08-02 | Allow POS checkout without a fabric roll for customer-supplied material (D-064) |
 | `15e9417` | 2026-08-02 | Add direct email+password team onboarding alongside email invites (D-063) |
 | `ae69f2b` | 2026-08-01 | Finalize admin: tenant self-serve billing, ledger, invoices list, WhatsApp config (D-062) |
