@@ -168,9 +168,14 @@ export const CUT_STYLE_OPTIONS = [
  * "Hip" now that m9Waist exists as the dedicated waist point.
  */
 export const MEASUREMENT_POINTS = [
-  { key: 'm1TotalLength', code: 'M1', en: 'Total Length', ar: 'الطول' },
+  // M1 and M3 split into front/back and left/right (D-068) — a robe's front
+  // and back panels are legitimately cut to different lengths, and an
+  // asymmetric body needs each sleeve measured on its own arm.
+  { key: 'm1FrontLength', code: 'M1F', en: 'Total Length (Front)', ar: 'الطول الأمامي' },
+  { key: 'm1BackLength', code: 'M1B', en: 'Total Length (Back)', ar: 'الطول الخلفي' },
   { key: 'm2ShoulderWidth', code: 'M2', en: 'Shoulder Width', ar: 'الكتف' },
-  { key: 'm3SleeveLength', code: 'M3', en: 'Sleeve Length', ar: 'الكم' },
+  { key: 'm3SleeveLeft', code: 'M3L', en: 'Sleeve Length (Left)', ar: 'الكم الأيسر' },
+  { key: 'm3SleeveRight', code: 'M3R', en: 'Sleeve Length (Right)', ar: 'الكم الأيمن' },
   { key: 'm4ChestCirc', code: 'M4', en: 'Chest', ar: 'الصدر' },
   { key: 'm5HipWidth', code: 'M5', en: 'Hip', ar: 'الورك' },
   { key: 'm6NeckDiameter', code: 'M6', en: 'Neck', ar: 'الرقبة' },
@@ -205,5 +210,7 @@ export function measurementPointsFor(garmentType: string) {
 
 /** The minimum fields the yield formula needs for this family (D-054). */
 export function requiredMeasurementKeysFor(garmentType: string): MeasurementKey[] {
-  return garmentFamily(garmentType) === 'trousers' ? ['t4Outseam'] : ['m1TotalLength', 'm3SleeveLength'];
+  return garmentFamily(garmentType) === 'trousers'
+    ? ['t4Outseam']
+    : ['m1FrontLength', 'm1BackLength', 'm3SleeveLeft', 'm3SleeveRight'];
 }

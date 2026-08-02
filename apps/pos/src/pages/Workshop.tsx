@@ -291,6 +291,21 @@ export default function Workshop() {
                   ))}
                 </Descriptions>
 
+                {!!measure.cutAgainst.trouserPallas?.length && (
+                  <Descriptions
+                    title="Palla widths"
+                    column={{ xs: 2, md: 4 }}
+                    size="small"
+                    style={{ marginBlockStart: 16 }}
+                  >
+                    {measure.cutAgainst.trouserPallas.map((p, i) => (
+                      <Descriptions.Item key={i} label={p.label}>
+                        {p.valueCm}cm
+                      </Descriptions.Item>
+                    ))}
+                  </Descriptions>
+                )}
+
                 {measure.history.length > 1 && (
                   <>
                     <Button

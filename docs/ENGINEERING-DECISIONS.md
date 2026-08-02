@@ -1700,3 +1700,63 @@ as filed when it was not.
   Railway API (`skipDeploys: true`, so setting them doesn't race a separate deploy trigger) ahead of
   pushing this commit, so the redeploy this push triggers picks up the new code and the new
   connection target in the same build — not two deploys where the first would still fail.
+
+## D-068: M1/M3 split into front/back and left/right, plus an open-ended trouser palla list
+
+- **Trigger:** direct feedback from a real tailor after a shop meeting, relayed verbatim: total
+  length differs between front and back panels, sleeve length differs between a customer's two
+  arms (one visibly shorter than the other is common enough to matter), and trousers/shalwar need
+  a variable number of "palla" (pleat/fold) width measurements per customer — not a fixed count.
+  The existing schema had exactly one M1 (`m1TotalLength`) and one M3 (`m3SleeveLength`) per
+  snapshot, and no trouser-palla concept at all.
+- **Three design questions were resolved with the user before writing any code**, since guessing
+  wrong on a schema change touching live customer measurement history is expensive to unwind:
+  1. What "palla" means structurally — resolved by choosing the most flexible shape rather than
+     guessing a fixed count: an open-ended `{label, valueCm}[]` list a tailor adds to freely,
+     stored as JSON (`trouserPallas`), not a fixed set of new columns.
+  2. Whether the new front/back and left/right fields replace M1/M3 or sit alongside them — user
+     chose **replace entirely**, so there is exactly one way to record total length and sleeve
+     length going forward, not two competing sources that can disagree.
+  3. Which value feeds the fabric-yield/cutting-length formula when a pair is asymmetric — user
+     chose **the longer of each pair** (`max(front, back)`, `max(left, right)`), since under-
+     cutting fabric for the longer side ruins the garment while over-cutting for the shorter side
+     only costs a small fabric margin.
+- **Migration preserves live production data by backfilling, not dropping-and-losing.**
+  `20260803000000_split_length_sleeve_trouser_pallas` adds the four new Decimal columns plus
+  `trouser_pallas JSONB`, `UPDATE`s both sides of each pair from the old single value (an existing
+  single value is assumed to apply to both sides until the customer is re-measured — there is no
+  way to know retroactively which side a historical single value actually meant), and only then
+  drops `m1_total_length`/`m3_sleeve_length`. Verified against real seeded Thobe rows post-migration
+  before writing any further code: all had `front == back` and `left == right`, matching their
+  pre-migration single values exactly.
+- **The yield formula reads `Prisma.Decimal.max()` on both pairs** (`pos.service.ts`
+  `computeYield()`), reusing the same static method already used elsewhere in this codebase
+  (`reservation.service.ts`) rather than introducing a second way to compare Decimals. A dedicated
+  e2e case (`pos.e2e-spec.ts`) proves this with deliberately asymmetric values — front 148cm / back
+  155cm, left 58cm / right 63cm — asserting the yield matches the longer-side calculation and
+  explicitly not the shorter-side one; every other yield assertion in that file uses symmetric
+  values, so backfilled and freshly-asymmetric customers are both covered.
+- **Four independent measurement-point label lists had to be updated in lockstep** — a pre-existing
+  duplication pattern from D-054/D-055, not introduced here: `packages/shared/src/measurements.ts`
+  (bare keys), `apps/pos/src/api.ts` (labels + codes + Arabic), `apps/api/src/measurements/
+  measurements.service.ts` (`MEASUREMENT_SELECT`/`MEASUREMENT_POINTS`), and `apps/admin/src/
+  components/CustomerDetailDrawer.tsx`. Confirmed complete via a repo-wide grep for the old field
+  names after every round of edits. `apps/pwa` needed no point-list change at all — it renders
+  whatever `/customer/measurements/points` returns — but did need new UI for `trouserPallas`
+  specifically, since an open-ended array isn't a simple keyed point the generic table already
+  handles.
+- **Every consumer of the split fields was updated, not just the write path:** POS `Counter.tsx`
+  (new front/back/left/right inputs, a plain `useState` array — not `Form.List` — for the palla
+  list, since this panel isn't wrapped in an AntD `<Form>`), `MeasurementDiagram.tsx` (two cuff
+  hotspots and two parallel length-dimension hotspots replacing the single M1/M3 markers),
+  `Workshop.tsx` (a "Palla widths" `Descriptions` block on the cutting-ticket view, since the
+  workshop floor cuts to whatever the ticket was actually made against), Admin's
+  `CustomerDetailDrawer.tsx`, and the PWA's read-only customer-facing measurement view.
+- **Verification:** unit suite green (measurements.service.spec.ts updated for the renamed keys);
+  e2e coverage extended with the asymmetric-yield case above plus a `trouserPallas` round-trip test
+  (create a Trousers snapshot with a multi-entry palla list, confirm both the create response and
+  `/measurements/history` return it unchanged); full regression (unit + e2e + all four frontend
+  builds + `node tools/memory-graph.mjs --check`) run before commit; live-verified in the browser —
+  POS Counter's new inputs and diagram hotspots, the palla add/remove list for Trousers, Workshop's
+  palla display, Admin's drawer, and the PWA's customer view all checked against a real re-measured
+  customer, not just green tests.

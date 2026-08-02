@@ -7,7 +7,7 @@ const snap = (garmentType: string, version: number, isActive: boolean, m1: strin
   garmentType,
   version,
   isActive,
-  m1TotalLength: m1,
+  m1FrontLength: m1,
   createdAt: new Date(`2026-0${version}-01T10:00:00Z`),
 });
 
@@ -93,7 +93,7 @@ describe('MeasurementsService', () => {
       const result = await service.forTicket('store-1', 't-1');
       // Re-measuring mid-production must not change what is on the cutting table.
       expect(result.cutAgainst!.version).toBe(2);
-      expect(result.cutAgainst!.m1TotalLength).toBe('148.00');
+      expect(result.cutAgainst!.m1FrontLength).toBe('148.00');
     });
 
     it('flags that a newer version exists without switching to it', async () => {

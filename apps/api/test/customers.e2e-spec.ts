@@ -97,10 +97,49 @@ describe('Customers (e2e)', () => {
     const res = await request(app.getHttpServer())
       .post(`/api/v1/customers/${created.body.id}/measurements`)
       .set({ Authorization: `Bearer ${cashierToken}`, 'X-Store-Id': storeId })
-      .send({ garmentType: 'Thobe', m1TotalLength: 148, m3SleeveLength: 60 })
+      .send({
+        garmentType: 'Thobe',
+        m1FrontLength: 148,
+        m1BackLength: 150,
+        m3SleeveLeft: 59,
+        m3SleeveRight: 60,
+      })
       .expect(201);
     expect(res.body.version).toBe(1);
     expect(res.body.isActive).toBe(true);
+    expect(res.body.m1FrontLength).toBe('148');
+    expect(res.body.m1BackLength).toBe('150');
+    expect(res.body.m3SleeveLeft).toBe('59');
+    expect(res.body.m3SleeveRight).toBe('60');
+  });
+
+  it('round-trips an open-ended trouser palla list (D-068)', async () => {
+    const phone = `+9665${(Date.now() + 10).toString().slice(-8)}`;
+    const created = await request(app.getHttpServer())
+      .post('/api/v1/customers')
+      .set({ Authorization: `Bearer ${cashierToken}`, 'X-Store-Id': storeId })
+      .send({ fullName: 'Trouser Customer', phone })
+      .expect(201);
+    createdCustomerIds.push(created.body.id);
+
+    const pallas = [
+      { label: 'Front palla', valueCm: 12 },
+      { label: 'Back palla', valueCm: 10.5 },
+      { label: 'Side palla', valueCm: 8 },
+    ];
+    const res = await request(app.getHttpServer())
+      .post(`/api/v1/customers/${created.body.id}/measurements`)
+      .set({ Authorization: `Bearer ${cashierToken}`, 'X-Store-Id': storeId })
+      .send({ garmentType: 'Trousers', t1Waist: 90, trouserPallas: pallas })
+      .expect(201);
+    expect(res.body.trouserPallas).toEqual(pallas);
+
+    const history = await request(app.getHttpServer())
+      .get(`/api/v1/customers/${created.body.id}/measurements/history`)
+      .set({ Authorization: `Bearer ${adminToken}`, 'X-Store-Id': storeId })
+      .expect(200);
+    const trousers = history.body.find((g: { garmentType: string }) => g.garmentType === 'Trousers');
+    expect(trousers.versions[0].trouserPallas).toEqual(pallas);
   });
 
   it('rejects a duplicate phone within the org, whoever registers it', async () => {

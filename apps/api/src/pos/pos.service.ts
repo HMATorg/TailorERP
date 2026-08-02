@@ -161,8 +161,10 @@ export class PosService {
   private computeYield(
     garmentType: string,
     measurement: {
-      m1TotalLength: Prisma.Decimal | null;
-      m3SleeveLength: Prisma.Decimal | null;
+      m1FrontLength: Prisma.Decimal | null;
+      m1BackLength: Prisma.Decimal | null;
+      m3SleeveLeft: Prisma.Decimal | null;
+      m3SleeveRight: Prisma.Decimal | null;
       t4Outseam: Prisma.Decimal | null;
     },
     quantity: number,
@@ -177,15 +179,19 @@ export class PosService {
         hemAllowanceM: TROUSERS_HEM_ALLOWANCE_METERS,
       });
     }
-    if (!measurement.m1TotalLength || !measurement.m3SleeveLength) {
+    if (!measurement.m1FrontLength || !measurement.m1BackLength || !measurement.m3SleeveLeft || !measurement.m3SleeveRight) {
       throw new BadRequestException(
-        'Active profile is missing M1 (total length) or M3 (sleeve length)',
+        'Active profile is missing M1 (front/back length) or M3 (left/right sleeve)',
       );
     }
+    // D-068: cut to the longer side of each pair — never short a fabric cut
+    // for an asymmetric body or a robe whose front and back panels differ.
+    const totalLengthCm = Prisma.Decimal.max(measurement.m1FrontLength, measurement.m1BackLength);
+    const sleeveLengthCm = Prisma.Decimal.max(measurement.m3SleeveLeft, measurement.m3SleeveRight);
     const { lengthMultiplier, hemAllowanceM } = ROBE_YIELD_PARAMS[garmentType] ?? ROBE_YIELD_PARAMS.Thobe;
     return this.yieldService.calculateRobe({
-      totalLengthCm: measurement.m1TotalLength,
-      sleeveLengthCm: measurement.m3SleeveLength,
+      totalLengthCm,
+      sleeveLengthCm,
       quantity,
       lengthMultiplier,
       hemAllowanceM,
@@ -229,8 +235,10 @@ export class PosService {
       item: PosCheckoutDto['items'][number];
       measurement: {
         id: string;
-        m1TotalLength: Prisma.Decimal | null;
-        m3SleeveLength: Prisma.Decimal | null;
+        m1FrontLength: Prisma.Decimal | null;
+        m1BackLength: Prisma.Decimal | null;
+        m3SleeveLeft: Prisma.Decimal | null;
+        m3SleeveRight: Prisma.Decimal | null;
         t4Outseam: Prisma.Decimal | null;
       };
       yieldMeters: Prisma.Decimal;

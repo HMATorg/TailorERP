@@ -64,8 +64,10 @@ describe('POS checkout (e2e)', () => {
         garmentType: 'Thobe',
         version: (last?.version ?? 0) + 1,
         isActive: true,
-        m1TotalLength: 150,
-        m3SleeveLength: 62,
+        m1FrontLength: 150,
+        m1BackLength: 150,
+        m3SleeveLeft: 62,
+        m3SleeveRight: 62,
       },
     });
   }, 60_000);
@@ -189,6 +191,38 @@ describe('POS checkout (e2e)', () => {
     // (1.50 x 2) + 0.62 + 0.20 = 3.82 per garment
     expect(res.body.perGarment).toBe('3.82');
     expect(res.body.totalMeters).toBe('11.46');
+  });
+
+  it('yields against the longer of front/back and left/right when the pair is asymmetric (D-068)', async () => {
+    const phone = `+9665${(Date.now() + 20).toString().slice(-8)}`;
+    const asym = await request(app.getHttpServer())
+      .post('/api/v1/customers')
+      .set(auth())
+      .send({ fullName: 'Asymmetric Fit', phone })
+      .expect(201);
+    await prisma.measurement.create({
+      data: {
+        customerId: asym.body.id,
+        garmentType: 'Thobe',
+        version: 1,
+        isActive: true,
+        m1FrontLength: 148,
+        m1BackLength: 155,
+        m3SleeveLeft: 58,
+        m3SleeveRight: 63,
+      },
+    });
+
+    const res = await request(app.getHttpServer())
+      .get(`/api/v1/pos/customers/${asym.body.id}/yield`)
+      .set(auth())
+      .query({ garmentType: 'Thobe', quantity: 1 })
+      .expect(200);
+
+    // max(148,155)=155, max(58,63)=63 → (1.55 x 2) + 0.63 + 0.20 = 3.93, NOT the
+    // shorter-side figure (1.48 x 2) + 0.58 + 0.20 = 3.74 — under-cutting fabric
+    // for the longer side would ruin the garment.
+    expect(res.body.perGarment).toBe('3.93');
   });
 
   it('checks out three garments: reserves fabric, splits tickets, issues ZATCA', async () => {

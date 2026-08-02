@@ -6,9 +6,14 @@
  * (`GET /customer/measurements/points`) so a client never has to hardcode them.
  */
 export const MEASUREMENT_POINT_KEYS = [
-  'm1TotalLength',
+  // M1 and M3 split into front/back and left/right (D-068) — a robe's front
+  // and back panels are legitimately cut to different lengths, and an
+  // asymmetric body needs each sleeve measured on its own arm.
+  'm1FrontLength',
+  'm1BackLength',
   'm2ShoulderWidth',
-  'm3SleeveLength',
+  'm3SleeveLeft',
+  'm3SleeveRight',
   'm4ChestCirc',
   'm5HipWidth',
   'm6NeckDiameter',
@@ -52,6 +57,16 @@ export interface MeasurementPoint {
 }
 
 /**
+ * A single palla (waist pleat) width on a shalwar/trousers garment (D-068).
+ * Variable count, not a fixed matrix point like T1-T7 — how many pleats a
+ * shalwar has is a per-garment choice a tailor adds one at a time.
+ */
+export interface TrouserPalla {
+  label: string;
+  valueCm: number;
+}
+
+/**
  * Thobe, Bisht and Shirt are all "long garment with body + sleeve + neck +
  * hem" shapes — the M1-M8 matrix genuinely applies to all three, just with
  * different typical values. Trousers is the only family with a disjoint
@@ -69,6 +84,8 @@ export interface MeasurementSnapshot extends Partial<Record<AnyPointKey, string 
   garmentType: string;
   version: number;
   isActive: boolean;
+  /** Trousers/shalwar only — the variable-count palla list (D-068). */
+  trouserPallas?: TrouserPalla[] | null;
   extra?: Record<string, unknown> | null;
   notes?: string | null;
   createdAt: string;

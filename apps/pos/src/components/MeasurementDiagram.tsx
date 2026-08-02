@@ -38,19 +38,26 @@ interface HotspotLayout {
 const ROBE_HOTSPOTS: Record<string, HotspotLayout> = {
   // Left column
   m6NeckDiameter: { x: 42, y: 28, targetX: 150, targetY: 30 },
-  m10RoundShoulder: { x: 42, y: 68, targetX: 115, targetY: 50 },
-  m3SleeveLength: { x: 42, y: 108, targetX: 78, targetY: 120 },
-  m11MidHand: { x: 42, y: 148, targetX: 80, targetY: 148 },
-  m12PlateLength: { x: 42, y: 188, targetX: 160, targetY: 95 },
-  m7WristOpening: { x: 42, y: 228, targetX: 88, targetY: 153 },
-  m13HalfChest: { x: 42, y: 268, targetX: 110, targetY: 130 },
+  m10RoundShoulder: { x: 42, y: 64, targetX: 115, targetY: 50 },
+  // Sleeve split left/right (D-068) — targets the two cuffs the outline
+  // already draws (one at each side), rather than assuming symmetry.
+  m3SleeveLeft: { x: 42, y: 100, targetX: 78, targetY: 120 },
+  m3SleeveRight: { x: 42, y: 136, targetX: 232, targetY: 120 },
+  m11MidHand: { x: 42, y: 172, targetX: 80, targetY: 148 },
+  m12PlateLength: { x: 42, y: 208, targetX: 160, targetY: 95 },
+  m7WristOpening: { x: 42, y: 244, targetX: 88, targetY: 153 },
+  m13HalfChest: { x: 42, y: 280, targetX: 110, targetY: 130 },
   // Right column
   m2ShoulderWidth: { x: 278, y: 50, targetX: 225, targetY: 55, span: { x1: 95, y1: 42, x2: 225, y2: 42 } },
   m4ChestCirc: { x: 278, y: 95, targetX: 225, targetY: 130, span: { x1: 95, y1: 130, x2: 225, y2: 130 } },
-  m1TotalLength: { x: 278, y: 140, targetX: 225, targetY: 200, span: { x1: 245, y1: 60, x2: 245, y2: 350 } },
-  m9Waist: { x: 278, y: 190, targetX: 215, targetY: 190, span: { x1: 100, y1: 190, x2: 220, y2: 190 } },
-  m5HipWidth: { x: 278, y: 235, targetX: 220, targetY: 250, span: { x1: 95, y1: 250, x2: 225, y2: 250 } },
-  m8SkirtPerimeter: { x: 278, y: 280, targetX: 215, targetY: 350, span: { x1: 95, y1: 350, x2: 225, y2: 350 } },
+  // Total length split front/back (D-068) — two parallel dimension lines
+  // rather than one, since a robe's front and back panels are legitimately
+  // cut to different lengths.
+  m1FrontLength: { x: 278, y: 140, targetX: 225, targetY: 200, span: { x1: 245, y1: 60, x2: 245, y2: 350 } },
+  m1BackLength: { x: 278, y: 178, targetX: 210, targetY: 200, span: { x1: 262, y1: 60, x2: 262, y2: 350 } },
+  m9Waist: { x: 278, y: 216, targetX: 215, targetY: 190, span: { x1: 100, y1: 190, x2: 220, y2: 190 } },
+  m5HipWidth: { x: 278, y: 258, targetX: 220, targetY: 250, span: { x1: 95, y1: 250, x2: 225, y2: 250 } },
+  m8SkirtPerimeter: { x: 278, y: 300, targetX: 215, targetY: 350, span: { x1: 95, y1: 350, x2: 225, y2: 350 } },
 };
 
 const TROUSER_HOTSPOTS: Record<string, HotspotLayout> = {

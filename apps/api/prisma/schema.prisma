@@ -449,9 +449,17 @@ model Measurement {
   isActive    Boolean  @default(true) @map("is_active")
 
   // Body measurement points matrix, cm (M1–M8)
-  m1TotalLength   Decimal? @map("m1_total_length") @db.Decimal(6, 2) // الطول
+  // M1 and M3 (D-068) — a real tailor shop's front/back and left/right
+  // measurements are not interchangeable: a robe's front and back panels are
+  // legitimately cut to different lengths, and an asymmetric body needs each
+  // sleeve measured on its own arm rather than assuming symmetry. The single
+  // m1TotalLength/m3SleeveLength columns this replaces are gone, not kept
+  // alongside these — see the migration for how existing rows were preserved.
+  m1FrontLength   Decimal? @map("m1_front_length") @db.Decimal(6, 2) // الطول الأمامي
+  m1BackLength    Decimal? @map("m1_back_length") @db.Decimal(6, 2) // الطول الخلفي
   m2ShoulderWidth Decimal? @map("m2_shoulder_width") @db.Decimal(6, 2) // الكتف
-  m3SleeveLength  Decimal? @map("m3_sleeve_length") @db.Decimal(6, 2) // الكم
+  m3SleeveLeft    Decimal? @map("m3_sleeve_left") @db.Decimal(6, 2) // الكم الأيسر
+  m3SleeveRight   Decimal? @map("m3_sleeve_right") @db.Decimal(6, 2) // الكم الأيمن
   m4ChestCirc     Decimal? @map("m4_chest_circumference") @db.Decimal(6, 2) // الصدر
   m5HipWidth      Decimal? @map("m5_hip_width") @db.Decimal(6, 2) // الوسط
   m6NeckDiameter  Decimal? @map("m6_neck_diameter") @db.Decimal(6, 2) // الرقبة
@@ -479,6 +487,11 @@ model Measurement {
   t5Thigh         Decimal? @map("t5_thigh") @db.Decimal(6, 2) // الفخذ
   t6Knee          Decimal? @map("t6_knee") @db.Decimal(6, 2) // الركبة
   t7AnkleOpening  Decimal? @map("t7_ankle_opening") @db.Decimal(6, 2) // فتحة الأسفل
+
+  /// Trousers/shalwar palla (waist pleat) widths (D-068) — a variable-count
+  /// list, not fixed columns: how many pleats a shalwar has is a per-garment
+  /// choice, not a fixed matrix point like T1-T7. Array of {label, valueCm}.
+  trouserPallas Json? @map("trouser_pallas")
 
   /// Any additional shop-specific points that do not fit the standard matrix
   extra       Json?

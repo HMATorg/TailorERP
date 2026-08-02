@@ -1,4 +1,6 @@
+import { Type } from 'class-transformer';
 import {
+  IsArray,
   IsBoolean,
   IsEmail,
   IsIn,
@@ -10,6 +12,7 @@ import {
   Max,
   MaxLength,
   Min,
+  ValidateNested,
 } from 'class-validator';
 
 const E164 = /^\+[1-9]\d{7,14}$/;
@@ -62,11 +65,20 @@ export class CreateMeasurementDto {
   @MaxLength(100)
   garmentType: string;
 
+  // M1 and M3 split into front/back and left/right (D-068) — see the schema
+  // comment on Measurement.m1FrontLength for why these replace the old
+  // single m1TotalLength/m3SleeveLength fields rather than sitting alongside them.
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   @Max(400)
   @IsOptional()
-  m1TotalLength?: number; // الطول
+  m1FrontLength?: number; // الطول الأمامي
+
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(400)
+  @IsOptional()
+  m1BackLength?: number; // الطول الخلفي
 
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
@@ -78,7 +90,13 @@ export class CreateMeasurementDto {
   @Min(0)
   @Max(400)
   @IsOptional()
-  m3SleeveLength?: number; // الكم
+  m3SleeveLeft?: number; // الكم الأيسر
+
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(400)
+  @IsOptional()
+  m3SleeveRight?: number; // الكم الأيمن
 
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
@@ -184,6 +202,14 @@ export class CreateMeasurementDto {
   @IsOptional()
   t7AnkleOpening?: number; // فتحة الأسفل
 
+  /** Trousers/shalwar palla widths (D-068) — a variable-count list a tailor
+   * adds one at a time, not a fixed matrix point like T1-T7. */
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => TrouserPallaDto)
+  @IsOptional()
+  trouserPallas?: TrouserPallaDto[];
+
   /** Shop-specific points outside the standard matrix */
   @IsObject()
   @IsOptional()
@@ -192,4 +218,15 @@ export class CreateMeasurementDto {
   @IsString()
   @IsOptional()
   notes?: string;
+}
+
+export class TrouserPallaDto {
+  @IsString()
+  @MaxLength(50)
+  label: string;
+
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(400)
+  valueCm: number;
 }

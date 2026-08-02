@@ -33,9 +33,12 @@ interface CustomerDetail {
  * own paper order form.
  */
 const MEASUREMENT_POINTS = [
-  { key: 'm1TotalLength', label: 'M1 · Total Length' },
+  // M1 and M3 split into front/back and left/right (D-068).
+  { key: 'm1FrontLength', label: 'M1F · Total Length (Front)' },
+  { key: 'm1BackLength', label: 'M1B · Total Length (Back)' },
   { key: 'm2ShoulderWidth', label: 'M2 · Shoulder' },
-  { key: 'm3SleeveLength', label: 'M3 · Sleeve' },
+  { key: 'm3SleeveLeft', label: 'M3L · Sleeve (Left)' },
+  { key: 'm3SleeveRight', label: 'M3R · Sleeve (Right)' },
   { key: 'm4ChestCirc', label: 'M4 · Chest' },
   { key: 'm5HipWidth', label: 'M5 · Hip' },
   { key: 'm6NeckDiameter', label: 'M6 · Neck' },
@@ -215,6 +218,17 @@ export default function CustomerDetailDrawer({
                         title: p.label,
                         render: (_: unknown, v: MeasurementSnapshot) => v[p.key] ?? '—',
                       })),
+                      ...(garmentFamily(garment.garmentType) === 'trousers'
+                        ? [
+                            {
+                              title: 'Palla widths',
+                              render: (_: unknown, v: MeasurementSnapshot) =>
+                                v.trouserPallas?.length
+                                  ? v.trouserPallas.map((p) => `${p.label}: ${p.valueCm}cm`).join(', ')
+                                  : '—',
+                            },
+                          ]
+                        : []),
                       {
                         title: 'Taken',
                         render: (_: unknown, v: MeasurementSnapshot) =>

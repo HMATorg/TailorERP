@@ -6,7 +6,7 @@
 > the repo — why something is blocked, what a trap looks like — belongs in the
 > auto-memory directory, not here.
 
-**Parent** `539cbb7` on `main` · **generated** 2026-08-02 20:44Z · staged into the commit being created on top of it
+**Parent** `7d3fe1c` on `main` · **generated** 2026-08-02 22:48Z · staged into the commit being created on top of it
 
 _History below runs to the parent; the commit carrying this file is its child._
 
@@ -90,7 +90,7 @@ graph LR
 
 ## Data model
 
-36 models, 28 enums, 13 migrations.
+36 models, 28 enums, 14 migrations.
 
 <details><summary>Models</summary>
 
@@ -113,10 +113,11 @@ graph LR
 | 11 | `20260729075052_add_tailor_shop_reference_fields` |
 | 12 | `20260729183118_add_zatca_api_secret` |
 | 13 | `20260729184725_add_zatca_onboarding_stage` |
+| 14 | `20260803000000_split_length_sleeve_trouser_pallas` |
 
 ## Engineering decisions
 
-67 recorded in `docs/ENGINEERING-DECISIONS.md`. "Cited by" counts source
+68 recorded in `docs/ENGINEERING-DECISIONS.md`. "Cited by" counts source
 files that reference the decision in a comment — an uncited decision is not wrong,
 but it is the first place to look when something has quietly been undone.
 
@@ -189,6 +190,7 @@ but it is the first place to look when something has quietly been undone.
 | `D-065` | A brand-new tenant's first cash sale could fail outright | 3 file(s) |
 | `D-066` | POS audit — Workshop cards didn't open, garment tags didn't print, every role saw every screen | 2 file(s) |
 | `D-067` | Production Redis was never actually reachable — silently, since the first deploy | — |
+| `D-068` | M1/M3 split into front/back and left/right, plus an open-ended trouser palla list | 11 file(s) |
 
 ## Tests
 
@@ -204,6 +206,7 @@ currently skipped. They are a shape check, not a substitute for running the suit
 
 | Commit | Date | Subject |
 | --- | --- | --- |
+| `7d3fe1c` | 2026-08-03 | Add TLS support for managed Redis, fixing a production Redis outage (D-067) |
 | `539cbb7` | 2026-08-02 | Audit and finalize POS module: Workshop clicks, garment-tag print, role-aware nav (D-066) |
 | `86afe0d` | 2026-08-02 | Provision the chart of accounts at tenant creation, not on first Ledger visit (D-065) |
 | `d773289` | 2026-08-02 | Allow POS checkout without a fabric roll for customer-supplied material (D-064) |

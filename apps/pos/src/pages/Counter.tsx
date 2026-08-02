@@ -32,6 +32,7 @@ import {
   STITCHING_OPTIONS,
   api,
   errMsg,
+  garmentFamily,
   measurementPointsFor,
   requiredMeasurementKeysFor,
   type MeasurementKey,
@@ -89,6 +90,9 @@ export default function Counter() {
   const [searching, setSearching] = useState(false);
 
   const [measurements, setMeasurements] = useState<Partial<Record<MeasurementKey, number | null>>>({});
+  // Trousers/shalwar palla widths (D-068) — a variable-count list, not a
+  // fixed matrix point: how many pleats a shalwar has is a per-garment choice.
+  const [pallas, setPallas] = useState<{ label: string; valueCm: number | null }[]>([]);
   const [savingM, setSavingM] = useState(false);
 
   const [garments, setGarments] = useState<Garment[]>([newGarment(1)]);
@@ -166,6 +170,12 @@ export default function Counter() {
       next[p.key] = v == null ? null : Number(v);
     }
     setMeasurements(next);
+    const savedPallas = active?.trouserPallas as { label: string; valueCm: number | string }[] | undefined;
+    setPallas(
+      Array.isArray(savedPallas)
+        ? savedPallas.map((p) => ({ label: p.label, valueCm: p.valueCm == null ? null : Number(p.valueCm) }))
+        : [],
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeGarmentType, lookup]);
 
@@ -176,9 +186,14 @@ export default function Counter() {
       // Only send this family's own fields — a Trousers save must not carry
       // stale robe values (or vice versa) into the new row.
       const payload = Object.fromEntries(activePoints.map((p) => [p.key, measurements[p.key]]));
+      const trouserPallas =
+        garmentFamily(activeGarmentType) === 'trousers'
+          ? pallas.filter((p) => p.label.trim() && p.valueCm != null)
+          : undefined;
       const { data } = await api.post(`/customers/${customer.id}/measurements`, {
         garmentType: activeGarmentType,
         ...payload,
+        ...(trouserPallas?.length ? { trouserPallas } : {}),
       });
       message.success(`${activeGarmentType} measurement profile v${data.version} saved`);
       await loadProfile(customer.id);
@@ -335,6 +350,59 @@ export default function Counter() {
                 values={measurements}
                 onChange={(k, v) => setMeasurements((m) => ({ ...m, [k]: v }))}
               />
+              {garmentFamily(activeGarmentType) === 'trousers' && (
+                <div style={{ marginBlockStart: 16 }}>
+                  <Typography.Text strong style={{ fontSize: 13, color: '#00695C' }}>
+                    Palla widths
+                  </Typography.Text>
+                  <Typography.Paragraph type="secondary" style={{ fontSize: 12, marginBlockEnd: 8 }}>
+                    Add one row per waist pleat — a shalwar's pleat count varies per customer.
+                  </Typography.Paragraph>
+                  <Space direction="vertical" style={{ width: '100%' }} size={8}>
+                    {pallas.map((p, i) => (
+                      <Space key={i} align="start">
+                        <Input
+                          placeholder="Label"
+                          value={p.label}
+                          onChange={(e) =>
+                            setPallas((rows) =>
+                              rows.map((r, ri) => (ri === i ? { ...r, label: e.target.value } : r)),
+                            )
+                          }
+                          style={{ width: 140 }}
+                        />
+                        <InputNumber
+                          placeholder="Width"
+                          min={0}
+                          max={400}
+                          step={0.5}
+                          value={p.valueCm}
+                          onChange={(v) =>
+                            setPallas((rows) => rows.map((r, ri) => (ri === i ? { ...r, valueCm: v } : r)))
+                          }
+                          addonAfter="cm"
+                        />
+                        <Button
+                          type="text"
+                          danger
+                          icon={<DeleteOutlined />}
+                          onClick={() => setPallas((rows) => rows.filter((_, ri) => ri !== i))}
+                        />
+                      </Space>
+                    ))}
+                    <Button
+                      type="dashed"
+                      icon={<PlusOutlined />}
+                      block
+                      onClick={() =>
+                        setPallas((rows) => [...rows, { label: `Palla ${rows.length + 1}`, valueCm: null }])
+                      }
+                    >
+                      Add palla
+                    </Button>
+                  </Space>
+                </div>
+              )}
               <Button
                 type="primary"
                 size="large"
@@ -348,9 +416,14 @@ export default function Counter() {
               </Button>
               {!requiredMeasurementKeysFor(activeGarmentType).every((k) => measurements[k] != null) && (
                 <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                  {requiredMeasurementKeysFor(activeGarmentType)
-                    .map((k) => activePoints.find((p) => p.key === k)?.code)
-                    .join(' and ')}{' '}
+                  {(() => {
+                    const codes = requiredMeasurementKeysFor(activeGarmentType).map(
+                      (k) => activePoints.find((p) => p.key === k)?.code,
+                    );
+                    return codes.length > 1
+                      ? `${codes.slice(0, -1).join(', ')} and ${codes[codes.length - 1]}`
+                      : codes[0];
+                  })()}{' '}
                   {requiredMeasurementKeysFor(activeGarmentType).length > 1 ? 'are' : 'is'} required — the fabric
                   yield is calculated from{' '}
                   {requiredMeasurementKeysFor(activeGarmentType).length > 1 ? 'them' : 'it'}.

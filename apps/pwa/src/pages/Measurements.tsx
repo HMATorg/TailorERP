@@ -201,6 +201,24 @@ function SnapshotTable({
         </table>
       )}
 
+      {!!snapshot.trouserPallas?.length && (
+        <div style={{ marginBlockStart: 6 }}>
+          <div className="muted" style={{ fontSize: 12 }}>
+            {t('measurements.pallaWidths')}
+          </div>
+          <table style={{ width: '100%', fontSize: 13, marginBlockStart: 4 }}>
+            <tbody>
+              {snapshot.trouserPallas.map((p, i) => (
+                <tr key={i}>
+                  <td style={{ color: 'var(--color-grey)' }}>{p.label}</td>
+                  <td style={{ textAlign: 'end' }}>{p.valueCm} cm</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
       {snapshot.notes && (
         <p className="muted" style={{ fontSize: 12, marginBlockStart: 6 }}>
           {snapshot.notes}
