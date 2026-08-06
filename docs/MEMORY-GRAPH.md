@@ -6,7 +6,7 @@
 > the repo — why something is blocked, what a trap looks like — belongs in the
 > auto-memory directory, not here.
 
-**Parent** `2f793c4` on `main` · **generated** 2026-08-06 11:25Z · staged into the commit being created on top of it
+**Parent** `7ea2425` on `main` · **generated** 2026-08-06 12:24Z · staged into the commit being created on top of it
 
 _History below runs to the parent; the commit carrying this file is its child._
 
@@ -213,6 +213,7 @@ currently skipped. They are a shape check, not a substitute for running the suit
 
 | Commit | Date | Subject |
 | --- | --- | --- |
+| `7ea2425` | 2026-08-06 | Add per-shop button catalog, graphic style selectors, per-point diagrams (D-071) |
 | `2f793c4` | 2026-08-06 | Add VAT ID/address to customers, CR/license number and logo to invoices (D-069) |
 | `0a04164` | 2026-08-03 | Split M1/M3 measurements into front/back and left/right, add trouser palla list (D-068) |
 | `7d3fe1c` | 2026-08-03 | Add TLS support for managed Redis, fixing a production Redis outage (D-067) |

@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { InputNumber, Segmented, Tooltip } from 'antd';
+import { Col, InputNumber, Row, Segmented, Tooltip } from 'antd';
 import { MEASUREMENT_POINTS, TROUSER_MEASUREMENT_POINTS, type MeasurementKey } from '../api';
 
 type Point = (typeof MEASUREMENT_POINTS)[number] | (typeof TROUSER_MEASUREMENT_POINTS)[number];
@@ -233,135 +233,146 @@ export default function MeasurementDiagram({ points = MEASUREMENT_POINTS, values
         />
       </div>
 
-      <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-        <svg
-          viewBox="0 0 320 400"
-          style={{ width: 300, flexShrink: 0 }}
-          aria-label={isTrousers ? 'Trousers measurement diagram' : 'Robe measurement diagram'}
-        >
-          {isTrousers ? <TrousersOutline /> : <RobeOutline />}
+      <Row gutter={[24, 16]}>
+        <Col xs={24} lg={9} xl={7}>
+          <div style={{ position: 'sticky', top: 12 }}>
+            <svg
+              viewBox="0 0 320 400"
+              style={{ width: '100%', maxWidth: 300 }}
+              aria-label={isTrousers ? 'Trousers measurement diagram' : 'Robe measurement diagram'}
+            >
+              {isTrousers ? <TrousersOutline /> : <RobeOutline />}
 
-          {/* Dimension-line arrows for every width/circumference/length point that has one */}
-          {points.map((point) => {
-            const spot = hotspots[point.key];
-            if (!spot?.span) return null;
-            return <DimensionLine key={`span-${point.key}`} {...spot.span} />;
-          })}
+              {/* Dimension-line arrows for every width/circumference/length point that has one */}
+              {points.map((point) => {
+                const spot = hotspots[point.key];
+                if (!spot?.span) return null;
+                return <DimensionLine key={`span-${point.key}`} {...spot.span} />;
+              })}
 
-          {/* Leader lines from each label to where it's actually measured on the body */}
-          {points.map((point) => {
-            const spot = hotspots[point.key];
-            if (!spot) return null;
-            return (
-              <g key={`leader-${point.key}`}>
-                <line
-                  x1={spot.x}
-                  y1={spot.y}
-                  x2={spot.targetX}
-                  y2={spot.targetY}
-                  stroke="#90A4AE"
-                  strokeWidth="1"
-                  strokeDasharray="2 2"
-                />
-                <circle cx={spot.targetX} cy={spot.targetY} r="2.5" fill="#00695C" />
-              </g>
-            );
-          })}
+              {/* Leader lines from each label to where it's actually measured on the body */}
+              {points.map((point) => {
+                const spot = hotspots[point.key];
+                if (!spot) return null;
+                return (
+                  <g key={`leader-${point.key}`}>
+                    <line
+                      x1={spot.x}
+                      y1={spot.y}
+                      x2={spot.targetX}
+                      y2={spot.targetY}
+                      stroke="#90A4AE"
+                      strokeWidth="1"
+                      strokeDasharray="2 2"
+                    />
+                    <circle cx={spot.targetX} cy={spot.targetY} r="2.5" fill="#00695C" />
+                  </g>
+                );
+              })}
 
-          {points.map((point) => {
-            const spot = hotspots[point.key];
-            if (!spot) return null;
-            const filled = values[point.key] != null;
-            const active = activeKey === point.key;
-            return (
-              <g
-                key={point.key}
-                onClick={() => focusPoint(point.key)}
-                style={{ cursor: 'pointer' }}
-                role="button"
-                aria-label={`${point.code} ${label(point)}`}
-              >
-                {active && (
-                  <circle cx={spot.x} cy={spot.y} r="15" fill="none" stroke="#FFA000" strokeWidth="2.5" />
-                )}
-                <circle
-                  cx={spot.x}
-                  cy={spot.y}
-                  r="12"
-                  fill={active ? '#FFA000' : filled ? '#00695C' : '#FFFFFF'}
-                  stroke={active ? '#FFA000' : '#00695C'}
-                  strokeWidth="2"
-                />
-                <text
-                  x={spot.x}
-                  y={spot.y + 4}
-                  textAnchor="middle"
-                  fontSize="10"
-                  fontWeight="700"
-                  fill={active || filled ? '#FFFFFF' : '#00695C'}
-                >
-                  {point.code}
-                </text>
-              </g>
-            );
-          })}
-        </svg>
+              {points.map((point) => {
+                const spot = hotspots[point.key];
+                if (!spot) return null;
+                const filled = values[point.key] != null;
+                const active = activeKey === point.key;
+                return (
+                  <g
+                    key={point.key}
+                    onClick={() => focusPoint(point.key)}
+                    style={{ cursor: 'pointer' }}
+                    role="button"
+                    aria-label={`${point.code} ${label(point)}`}
+                  >
+                    {active && (
+                      <circle cx={spot.x} cy={spot.y} r="15" fill="none" stroke="#FFA000" strokeWidth="2.5" />
+                    )}
+                    <circle
+                      cx={spot.x}
+                      cy={spot.y}
+                      r="12"
+                      fill={active ? '#FFA000' : filled ? '#00695C' : '#FFFFFF'}
+                      stroke={active ? '#FFA000' : '#00695C'}
+                      strokeWidth="2"
+                    />
+                    <text
+                      x={spot.x}
+                      y={spot.y + 4}
+                      textAnchor="middle"
+                      fontSize="10"
+                      fontWeight="700"
+                      fill={active || filled ? '#FFFFFF' : '#00695C'}
+                    >
+                      {point.code}
+                    </text>
+                  </g>
+                );
+              })}
+            </svg>
+          </div>
+        </Col>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: 12, flex: 1, minWidth: 260 }}>
-          {points.map((point) => {
-            const active = activeKey === point.key;
-            const spot = hotspots[point.key];
-            return (
-              <div
-                key={point.key}
-                ref={(el) => {
-                  fieldRefs.current[point.key] = el;
-                }}
-                style={{
-                  borderRadius: 8,
-                  padding: 6,
-                  marginBlock: -6,
-                  marginInline: -6,
-                  background: active ? '#FFF8E1' : 'transparent',
-                  boxShadow: active ? '0 0 0 2px #FFA000' : 'none',
-                  transition: 'background 0.15s, box-shadow 0.15s',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBlockEnd: 4 }}>
-                  {spot && <PointThumbnail spot={spot} isTrousers={isTrousers} />}
-                  <div style={{ fontSize: 13, color: '#757575' }}>
-                    <Tooltip title={`${point.en} — ${point.ar}`}>
-                      <b
-                        style={{ color: '#00695C', cursor: 'pointer' }}
-                        onClick={() => focusPoint(point.key)}
-                      >
-                        {point.code}
-                      </b>
-                    </Tooltip>{' '}
-                    {label(point)}
-                  </div>
-                </div>
-                <InputNumber
+        <Col xs={24} lg={15} xl={17}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
+              gap: 12,
+            }}
+          >
+            {points.map((point) => {
+              const active = activeKey === point.key;
+              const spot = hotspots[point.key];
+              return (
+                <div
+                  key={point.key}
                   ref={(el) => {
-                    inputRefs.current[point.key] = el;
+                    fieldRefs.current[point.key] = el;
                   }}
-                  value={toDisplay(values[point.key] ?? null)}
-                  onChange={(v) => onChange(point.key, fromDisplay(v))}
-                  onFocus={() => setActiveKey(point.key)}
-                  disabled={readOnly}
-                  min={0}
-                  max={unit === 'in' ? 157.5 : 400}
-                  step={unit === 'in' ? 0.25 : 0.5}
-                  addonAfter={unit}
-                  size="large"
-                  style={{ width: '100%' }}
-                  inputMode="decimal"
-                />
-              </div>
-            );
-          })}
-        </div>
-      </div>
+                  style={{
+                    border: active ? '1.5px solid #FFA000' : '1px solid #EEEEEE',
+                    borderRadius: 8,
+                    padding: 10,
+                    background: active ? '#FFF8E1' : '#fff',
+                    boxShadow: active ? '0 2px 8px rgba(255,160,0,0.15)' : 'none',
+                    transition: 'background 0.15s, border-color 0.15s, box-shadow 0.15s',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBlockEnd: 6 }}>
+                    {spot && <PointThumbnail spot={spot} isTrousers={isTrousers} />}
+                    <div style={{ fontSize: 12, color: '#757575', lineHeight: 1.3 }}>
+                      <Tooltip title={`${point.en} — ${point.ar}`}>
+                        <b
+                          style={{ color: '#00695C', cursor: 'pointer' }}
+                          onClick={() => focusPoint(point.key)}
+                        >
+                          {point.code}
+                        </b>
+                      </Tooltip>{' '}
+                      {label(point)}
+                    </div>
+                  </div>
+                  <InputNumber
+                    ref={(el) => {
+                      inputRefs.current[point.key] = el;
+                    }}
+                    value={toDisplay(values[point.key] ?? null)}
+                    onChange={(v) => onChange(point.key, fromDisplay(v))}
+                    onFocus={() => setActiveKey(point.key)}
+                    disabled={readOnly}
+                    min={0}
+                    max={unit === 'in' ? 157.5 : 400}
+                    step={unit === 'in' ? 0.25 : 0.5}
+                    addonAfter={unit}
+                    size="large"
+                    style={{ width: '100%' }}
+                    inputMode="decimal"
+                  />
+                </div>
+              );
+            })}
+          </div>
+        </Col>
+      </Row>
     </div>
   );
 }

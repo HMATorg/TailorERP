@@ -343,21 +343,21 @@ export default function Counter() {
       )}
 
       {customer && (
-        <Row gutter={16}>
-          {/* Phase 1 §2: measurement verification on the 2D blueprint */}
-          <Col xs={24} xl={11}>
-            <Card
-              title={`Measurements — ${activeGarmentType}`}
-              size="small"
-              extra={
-                activeProfile ? (
-                  <Tag color="blue">active v{String(activeProfile.version)}</Tag>
-                ) : (
-                  <Tag color="red">none on file</Tag>
-                )
-              }
-              style={{ marginBlockEnd: 16 }}
-            >
+        <Space direction="vertical" size={16} style={{ width: '100%', display: 'flex' }}>
+          {/* Phase 1 §2: measurement verification on the 2D blueprint — its own
+              full-width section so the field grid below has room to actually
+              lay out as a grid instead of being squeezed by the Garments panel. */}
+          <Card
+            title={`Measurements — ${activeGarmentType}`}
+            size="small"
+            extra={
+              activeProfile ? (
+                <Tag color="blue">active v{String(activeProfile.version)}</Tag>
+              ) : (
+                <Tag color="red">none on file</Tag>
+              )
+            }
+          >
               <MeasurementDiagram
                 points={activePoints}
                 values={measurements}
@@ -442,15 +442,13 @@ export default function Counter() {
                   {requiredMeasurementKeysFor(activeGarmentType).length > 1 ? 'them' : 'it'}.
                 </Typography.Text>
               )}
-            </Card>
-          </Col>
+          </Card>
 
           {/* Phase 1 §3 + Phase 2: garment tabs and live stock validation */}
-          <Col xs={24} xl={13}>
-            <Card
-              title="Garments"
-              size="small"
-              extra={
+          <Card
+            title="Garments"
+            size="small"
+            extra={
                 <Button
                   icon={<PlusOutlined />}
                   onClick={() => {
@@ -752,9 +750,8 @@ export default function Counter() {
                   </Button>
                 </>
               )}
-            </Card>
-          </Col>
-        </Row>
+          </Card>
+        </Space>
       )}
     </div>
   );
