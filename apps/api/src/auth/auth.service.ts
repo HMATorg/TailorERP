@@ -24,12 +24,15 @@ const STAFF_SESSION_USER_INCLUDE = {
       taxId: true,
       crNumber: true,
       licenseNumber: true,
+      receiptNote: true,
       logoUrl: true,
     },
   },
   storeRoles: {
     where: { isActive: true },
-    include: { store: { select: { id: true, name: true, status: true } } },
+    include: {
+      store: { select: { id: true, name: true, status: true, address: true, phone: true } },
+    },
   },
 } satisfies Prisma.UserInclude;
 
@@ -58,7 +61,14 @@ export class AuthService {
         ? (
             await this.prisma.store.findMany({
               where: { organizationId: user.organizationId! },
-              select: { id: true, name: true, status: true, isHeadquarters: true },
+              select: {
+                id: true,
+                name: true,
+                status: true,
+                isHeadquarters: true,
+                address: true,
+                phone: true,
+              },
               orderBy: [{ isHeadquarters: 'desc' }, { name: 'asc' }],
             })
           ).map((s) => ({ ...s, role: 'hq_admin' as const, permissions: [...PERMISSIONS] }))
@@ -91,6 +101,10 @@ export class AuthService {
           // receipt now prints (D-069).
           crNumber: user.organization!.crNumber,
           licenseNumber: user.organization!.licenseNumber,
+          // Opt-in liability/policy note a thermal receipt prints when the
+          // shop has set one (D-072) — omitted entirely, not just blank,
+          // when they haven't.
+          receiptNote: user.organization!.receiptNote,
           logoUrl: user.organization!.logoUrl,
         },
         storeRoles: user.storeRoles.map((r) => ({ storeId: r.storeId, role: r.role })),

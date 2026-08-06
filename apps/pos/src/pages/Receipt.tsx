@@ -3,6 +3,7 @@ import { CheckCircleFilled } from '@ant-design/icons';
 import { Alert, Button, Card, Col, Descriptions, Row, Space, Table, Tag, Typography } from 'antd';
 import QRCode from 'qrcode';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { useAuth } from '../api';
 import PrintCenter, { type PrintCenterData } from '../components/PrintCenter';
 
 /**
@@ -19,6 +20,7 @@ export default function Receipt() {
   const navigate = useNavigate();
   const { state } = useLocation() as { state: Record<string, any> | null };
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+  const cashierName = useAuth((s) => s.user?.fullName ?? null);
 
   const invoice = state?.invoice;
   const lines: { garmentType: string; unitPrice: number }[] = state?.lines ?? [];
@@ -46,6 +48,9 @@ export default function Receipt() {
 
   const printData: PrintCenterData = {
     orderNumber: state.orderNumber,
+    createdAt: state.createdAt,
+    cashierName,
+    depositMethod: state.depositMethod ?? null,
     customerName: state.customerName,
     customerVatNumber: state.customerVatNumber,
     customerAddress: state.customerAddress,

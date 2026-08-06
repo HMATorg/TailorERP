@@ -9,6 +9,7 @@ const PROFILE_SELECT = {
   vatNumber: true,
   crNumber: true,
   licenseNumber: true,
+  receiptNote: true,
   logoUrl: true,
 } as const;
 
@@ -49,6 +50,7 @@ export class OrganizationService {
         ...(dto.vatNumber !== undefined && { vatNumber: dto.vatNumber }),
         ...(dto.crNumber !== undefined && { crNumber: dto.crNumber }),
         ...(dto.licenseNumber !== undefined && { licenseNumber: dto.licenseNumber }),
+        ...(dto.receiptNote !== undefined && { receiptNote: dto.receiptNote }),
         ...(dto.logoUrl !== undefined && { logoUrl: dto.logoUrl }),
       },
       select: PROFILE_SELECT,

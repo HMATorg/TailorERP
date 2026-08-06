@@ -13,6 +13,9 @@ export interface StoreSummary {
   id: string;
   name: string;
   isHeadquarters?: boolean;
+  /** Printed on the thermal receipt footer alongside the pickup reminder (D-072). */
+  address?: string | null;
+  phone?: string | null;
   /**
    * Effective permissions for THIS store (role defaults + per-user grant/revoke
    * overrides), computed server-side and shipped at login so the client can hide
@@ -38,6 +41,8 @@ export interface OrganizationSummary {
   taxId: string | null;
   crNumber: string | null;
   licenseNumber: string | null;
+  /** Opt-in liability/policy note printed on the thermal receipt when set (D-072). */
+  receiptNote: string | null;
   logoUrl: string | null;
 }
 

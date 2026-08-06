@@ -426,6 +426,7 @@ export class PosService {
     return {
       id: order.id,
       orderNumber: order.orderNumber,
+      createdAt: order.createdAt,
       customerName: customer.fullName,
       customerVatNumber: customer.vatNumber,
       customerAddress: customer.address,
@@ -434,6 +435,10 @@ export class PosService {
       totalAmount: order.totalAmount.toFixed(2),
       paidAmount: order.paidAmount.toFixed(2),
       balanceDue: order.totalAmount.minus(order.paidAmount).toFixed(2),
+      // Only meaningful once money has actually changed hands — a SAR 0
+      // deposit has no "method" a receipt should print (D-072).
+      depositMethod:
+        dto.depositAmount && dto.depositAmount > 0 ? (dto.depositMethod ?? 'card') : null,
       totalReservedMeters: totalReserved.toFixed(2),
       // Zipped with `prepared` by index rather than re-queried: createTicketsForOrder
       // creates one ticket per order.item in sequenceNo order, and order.items were

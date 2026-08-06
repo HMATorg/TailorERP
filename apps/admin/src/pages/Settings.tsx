@@ -24,6 +24,7 @@ interface OrganizationProfile {
   vatNumber: string | null;
   crNumber: string | null;
   licenseNumber: string | null;
+  receiptNote: string | null;
   logoUrl: string | null;
 }
 
@@ -36,7 +37,13 @@ const MAX_LOGO_BYTES = 300 * 1024;
  * this is plain display data an owner edits directly, no CSID or OTP involved.
  */
 function BusinessProfileCard() {
-  const [form] = Form.useForm<{ name: string; vatNumber?: string; crNumber?: string; licenseNumber?: string }>();
+  const [form] = Form.useForm<{
+    name: string;
+    vatNumber?: string;
+    crNumber?: string;
+    licenseNumber?: string;
+    receiptNote?: string;
+  }>();
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [logoDataUri, setLogoDataUri] = useState<string | null>(null);
@@ -51,6 +58,7 @@ function BusinessProfileCard() {
         vatNumber: data.vatNumber ?? undefined,
         crNumber: data.crNumber ?? undefined,
         licenseNumber: data.licenseNumber ?? undefined,
+        receiptNote: data.receiptNote ?? undefined,
       });
       setLogoDataUri(data.logoUrl);
       setSavedLogoDataUri(data.logoUrl);
@@ -77,7 +85,13 @@ function BusinessProfileCard() {
     return false; // handled entirely client-side — no auto-upload to any endpoint
   };
 
-  const save = async (v: { name: string; vatNumber?: string; crNumber?: string; licenseNumber?: string }) => {
+  const save = async (v: {
+    name: string;
+    vatNumber?: string;
+    crNumber?: string;
+    licenseNumber?: string;
+    receiptNote?: string;
+  }) => {
     setSaving(true);
     try {
       await api.put('/organization', {
@@ -115,6 +129,13 @@ function BusinessProfileCard() {
         </Form.Item>
         <Form.Item name="licenseNumber" label="License number">
           <Input />
+        </Form.Item>
+        <Form.Item
+          name="receiptNote"
+          label="Receipt note (optional)"
+          extra="Printed near the bottom of the thermal receipt when set — e.g. a liability or pickup policy. Left blank, nothing prints."
+        >
+          <Input.TextArea rows={2} maxLength={500} showCount placeholder="e.g. Not responsible for garments left unclaimed after 3 months" />
         </Form.Item>
         <Form.Item label="Logo">
           <Space align="start">

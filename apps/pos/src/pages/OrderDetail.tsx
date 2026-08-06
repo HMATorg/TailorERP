@@ -43,6 +43,7 @@ interface OrderDetailData {
   items: { id: string; garmentType: string; quantity: number; unitPrice: string }[];
   statusHistory: { id: string; fromStatus: string | null; toStatus: string; note: string | null; createdAt: string; changedBy: { fullName: string } | null }[];
   payments: { id: string; amount: string; method: string; kind: string; createdAt: string }[];
+  createdBy: { id: string; fullName: string | null } | null;
   tickets: { id: string; ticketCode: string; garmentType: string; station: string }[];
   invoice: {
     id: string;
@@ -118,6 +119,13 @@ export default function OrderDetail() {
 
   const printData: PrintCenterData = {
     orderNumber: order.orderNumber,
+    createdAt: order.createdAt,
+    // Who actually rang this order up, not whoever is viewing/reprinting it
+    // now — those can be different staff on a different day.
+    cashierName: order.createdBy?.fullName ?? null,
+    // Most recent payment's method — a settled order only ever really has
+    // one meaningful "how was this paid" answer for the receipt to print.
+    depositMethod: order.payments.length ? order.payments[order.payments.length - 1].method : null,
     customerName: order.customer.fullName,
     customerVatNumber: order.customer.vatNumber,
     customerAddress: order.customer.address,
@@ -126,7 +134,7 @@ export default function OrderDetail() {
     paidAmount: money(order.paidAmount),
     balanceDue: money(balance),
     tickets: order.tickets,
-    lines: order.items.map((i) => ({ garmentType: i.garmentType, unitPrice: i.unitPrice })),
+    lines: order.items.map((i) => ({ garmentType: i.garmentType, unitPrice: i.unitPrice, quantity: i.quantity })),
     invoice: order.invoice
       ? {
           id: order.invoice.id,

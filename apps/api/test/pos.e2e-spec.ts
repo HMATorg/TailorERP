@@ -257,6 +257,9 @@ describe('POS checkout (e2e)', () => {
     // Returning the stale order printed a receipt claiming the full amount was due.
     expect(res.body.paidAmount).toBe('600.00');
     expect(res.body.balanceDue).toBe('600.00');
+    // The thermal receipt's "Payment method" row reads this directly (D-072).
+    expect(res.body.depositMethod).toBe('card');
+    expect(res.body.createdAt).toEqual(expect.anything());
 
     // Fabric is held, not yet cut
     const after = await prisma.inventoryBatch.findUniqueOrThrow({ where: { id: batchId } });
@@ -327,6 +330,8 @@ describe('POS checkout (e2e)', () => {
     // The estimate still comes back — useful even with no store fabric involved.
     expect(res.body.totalReservedMeters).toBe('3.82');
     expect(res.body.tickets).toHaveLength(1);
+    // No deposit was taken — a receipt has no "how was this paid" answer to print.
+    expect(res.body.depositMethod).toBeNull();
 
     // Nothing touched the roll: no reservation held, no quantity moved.
     const after = await prisma.inventoryBatch.findUniqueOrThrow({ where: { id: batchId } });

@@ -24,6 +24,12 @@ export class UpdateOrganizationDto {
   @IsOptional()
   licenseNumber?: string;
 
+  /** Liability/policy note printed on the thermal receipt when set (D-072). */
+  @IsString()
+  @MaxLength(500)
+  @IsOptional()
+  receiptNote?: string;
+
   /**
    * The logo itself, not a pointer to it — a data URI stored directly in the
    * column. A shop's logo is looked up once per login and embedded on every

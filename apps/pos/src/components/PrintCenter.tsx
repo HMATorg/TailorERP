@@ -6,6 +6,29 @@ import { api, errMsg, useAuth } from '../api';
 import { printSection } from '../print';
 import Barcode from './Barcode';
 
+/** Bilingual label pairs for the thermal receipt's fixed rows (D-072) — the
+ * reference receipt this was redesigned against pairs a short English
+ * mnemonic with the Arabic label on every row, not just the header. */
+const PAYMENT_METHOD_LABELS: Record<string, { en: string; ar: string }> = {
+  cash: { en: 'Cash', ar: 'نقدي' },
+  card: { en: 'Card', ar: 'بطاقة' },
+  transfer: { en: 'Bank transfer', ar: 'تحويل بنكي' },
+  other: { en: 'Other', ar: 'أخرى' },
+};
+
+/** One row of the thermal receipt's info/totals blocks: English label left,
+ * value centered and bold, Arabic label right — matches the reference
+ * receipt's row layout exactly instead of an English-only list. */
+function BiRow({ en, ar, value, bold }: { en: string; ar: string; value: string; bold?: boolean }) {
+  return (
+    <div className={`birow small${bold ? ' bold' : ''}`}>
+      <span className="en">{en}</span>
+      <span className="val">{value}</span>
+      <span className="ar">{ar}</span>
+    </div>
+  );
+}
+
 export interface PrintCenterTicket {
   id: string;
   ticketCode: string;
@@ -24,6 +47,15 @@ export interface PrintCenterInvoice {
 
 export interface PrintCenterData {
   orderNumber: string;
+  /** When the order was actually created — not "now", so a reprint days
+   * later still shows the invoice's real date/time (D-072). */
+  createdAt?: string | Date;
+  /** Whoever rang this order up — the order's creator on a reprint, the
+   * current session on a fresh checkout (both resolved by the caller). */
+  cashierName?: string | null;
+  /** How the amount collected so far was paid — omitted (not shown) if
+   * nothing has been paid yet. */
+  depositMethod?: string | null;
   customerName: string;
   customerVatNumber?: string | null;
   customerAddress?: string | null;
@@ -32,7 +64,7 @@ export interface PrintCenterData {
   paidAmount: string;
   balanceDue: string;
   tickets: PrintCenterTicket[];
-  lines: { garmentType: string; unitPrice: number | string }[];
+  lines: { garmentType: string; unitPrice: number | string; quantity?: number }[];
   invoice: PrintCenterInvoice | null;
 }
 
@@ -50,6 +82,9 @@ export default function PrintCenter({ data }: { data: PrintCenterData }) {
   const store = stores.find((s) => s.id === activeStoreId);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
+  // The order's actual creation time, not render time — a reprint days later
+  // must still show when the invoice was really issued (D-072).
+  const issuedAt = data.createdAt ? new Date(data.createdAt) : new Date();
 
   useEffect(() => {
     if (!data.invoice?.qrCodeBase64) {
@@ -130,74 +165,78 @@ export default function PrintCenter({ data }: { data: PrintCenterData }) {
         )}
         <div className="center bold">{organization?.name ?? 'Tailonix'}</div>
         {store && <div className="center small">{store.name}</div>}
-        {organization?.vatNumber && <div className="center small">VAT {organization.vatNumber}</div>}
-        {organization?.crNumber && <div className="center small">CR {organization.crNumber}</div>}
-        {organization?.licenseNumber && <div className="center small">License {organization.licenseNumber}</div>}
+        {store?.address && <div className="center small">{store.address}</div>}
         <div className="rule" />
-        <div className="row small">
-          <span>Order</span>
-          <span className="bold">{data.orderNumber}</span>
-        </div>
-        <div className="row small">
-          <span>Date</span>
-          <span>{new Date().toLocaleString()}</span>
-        </div>
-        {data.invoice && (
-          <div className="row small">
-            <span>Invoice</span>
-            <span>{data.invoice.invoiceNumber}</span>
-          </div>
+        {organization?.vatNumber && (
+          <BiRow en="VAT No." ar="الرقم الضريبي" value={organization.vatNumber} />
+        )}
+        {organization?.crNumber && (
+          <BiRow en="CR No." ar="رقم السجل التجاري" value={organization.crNumber} />
+        )}
+        {organization?.licenseNumber && (
+          <BiRow en="License No." ar="رقم الرخصة" value={organization.licenseNumber} />
         )}
         <div className="rule" />
-        <div className="row small">
-          <span>Customer</span>
-          <span className="bold">{data.customerName}</span>
-        </div>
-        {data.customerVatNumber && (
-          <div className="row small">
-            <span>Customer VAT</span>
-            <span>{data.customerVatNumber}</span>
-          </div>
-        )}
-        {data.customerAddress && <div className="small">Address: {data.customerAddress}</div>}
+        <div className="center bold title">TAX INVOICE · فاتورة ضريبية</div>
+        {data.invoice && <BiRow en="Inv. No." ar="رقم الفاتورة" value={data.invoice.invoiceNumber} />}
+        <BiRow en="Inv. Date" ar="تاريخ الفاتورة" value={issuedAt.toLocaleDateString()} />
+        <BiRow en="Inv. Time" ar="وقت الفاتورة" value={issuedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} />
+        <BiRow en="Order" ar="رقم الطلب" value={data.orderNumber} />
+        <BiRow en="Client" ar="العميل" value={data.customerName} />
+        {data.customerVatNumber && <BiRow en="Client VAT No." ar="الرقم الضريبي للعميل" value={data.customerVatNumber} />}
+        {data.cashierName && <BiRow en="Cashier" ar="الكاشير" value={data.cashierName} />}
+        {data.customerAddress && <div className="small">Address / العنوان: {data.customerAddress}</div>}
         <div className="rule" />
-        {data.lines.map((l, i) => (
-          <div className="row small" key={i}>
-            <span>{l.garmentType}</span>
-            <span>SAR {Number(l.unitPrice).toFixed(2)}</span>
-          </div>
-        ))}
+        <table className="doc-table">
+          <thead>
+            <tr>
+              <th>Product · المنتج</th>
+              <th>Qty · الكمية</th>
+              <th>Price · السعر</th>
+              <th>Total · الإجمالي</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.lines.map((l, i) => {
+              const qty = l.quantity ?? 1;
+              const unit = Number(l.unitPrice);
+              return (
+                <tr key={i}>
+                  <td>{l.garmentType}</td>
+                  <td className="center">{qty}</td>
+                  <td className="right">{unit.toFixed(2)}</td>
+                  <td className="right">{(unit * qty).toFixed(2)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
         <div className="rule" />
         {data.invoice ? (
           <>
-            <div className="row small">
-              <span>Net</span>
-              <span>SAR {data.invoice.netAmount}</span>
-            </div>
-            <div className="row small">
-              <span>VAT (15%)</span>
-              <span>SAR {data.invoice.vatAmount}</span>
-            </div>
+            <BiRow en="Net" ar="الصافي" value={`SAR ${data.invoice.netAmount}`} />
+            <BiRow en="VAT (15%)" ar="ضريبة القيمة المضافة" value={`SAR ${data.invoice.vatAmount}`} />
           </>
         ) : (
-          <div className="row small">
-            <span>Subtotal</span>
-            <span>SAR {data.totalAmount}</span>
+          <BiRow en="Subtotal" ar="الإجمالي قبل الضريبة" value={`SAR ${data.totalAmount}`} />
+        )}
+        <BiRow en="Total + VAT" ar="الإجمالي شامل الضريبة" value={`SAR ${data.totalAmount}`} bold />
+        {data.depositMethod && (
+          <BiRow
+            en="Payment method"
+            ar="طريقة الدفع"
+            value={PAYMENT_METHOD_LABELS[data.depositMethod]?.en ?? data.depositMethod}
+          />
+        )}
+        <BiRow en="Paid" ar="المدفوع" value={`SAR ${data.paidAmount}`} />
+        <BiRow en="Balance due" ar="المتبقي" value={`SAR ${data.balanceDue}`} bold />
+        <BiRow en="Item Quan." ar="عدد الأصناف" value={String(data.lines.length)} />
+        <div className="rule" />
+        {organization?.receiptNote && (
+          <div className="center small rtl" style={{ marginBlockEnd: 6 }}>
+            {organization.receiptNote}
           </div>
         )}
-        <div className="row bold">
-          <span>Total</span>
-          <span>SAR {data.totalAmount}</span>
-        </div>
-        <div className="row small">
-          <span>Paid</span>
-          <span>SAR {data.paidAmount}</span>
-        </div>
-        <div className="row bold">
-          <span>Balance due</span>
-          <span>SAR {data.balanceDue}</span>
-        </div>
-        <div className="rule" />
         {qrDataUrl && (
           <div className="center">
             <img src={qrDataUrl} alt="ZATCA QR" style={{ width: 160, height: 160 }} />
@@ -206,6 +245,10 @@ export default function PrintCenter({ data }: { data: PrintCenterData }) {
         <div className="center small">Thank you for your business</div>
         <div className="center small">
           {data.invoice ? 'Full A4 tax invoice available on request' : 'Provisional receipt — tax invoice pending'}
+        </div>
+        <div className="center small rtl">
+          Garment pickup by appointment · استلام الملابس حسب الموعد المحدد
+          {store?.phone ? ` · ${store.phone}` : ''}
         </div>
       </div>
 

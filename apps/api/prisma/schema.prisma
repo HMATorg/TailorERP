@@ -231,6 +231,11 @@ model Organization {
   crNumber        String?   @map("cr_number") @db.VarChar(50)
   /// Municipal/business license number (رقم الرخصة), display only (D-069)
   licenseNumber   String?   @map("license_number") @db.VarChar(50)
+  /// Free-text liability/policy note (e.g. "not responsible for garments
+  /// left unclaimed after 3 months") printed on the thermal receipt when
+  /// set — shop-specific policy, so it is opt-in per tenant, not fixed
+  /// product copy (D-072)
+  receiptNote     String?   @map("receipt_note") @db.VarChar(500)
   /// ZATCA-issued CSID + private key for cryptographic stamping (encrypted)
   zatcaCsidEncrypted       String? @map("zatca_csid_encrypted")
   zatcaPrivateKeyEncrypted String? @map("zatca_private_key_encrypted")

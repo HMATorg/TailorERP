@@ -1904,3 +1904,66 @@ as filed when it was not.
   Workshop ticket-scan view (logged in as a `view_workshop`-permitted user) displays the exact
   button photo, serial, and label chosen at the counter alongside the existing collar/cuff/pocket/
   stitching fields.
+
+## D-072: Thermal receipt redesigned to match a real Saudi tailor shop's layout
+
+- **Trigger:** the user sent a photo of a competitor's printed thermal tax invoice (the same
+  "الثوب الجميل" shop referenced for D-071's button board) and said ours "is not as per the
+  requirements as per the reference." The reference's structure — bilingual English/Arabic labels
+  on every row, a title block, cashier name, split invoice date/time, a bordered item table with
+  quantity, a payment-method row, an item-count row, a liability disclaimer, and a pickup/phone
+  footer — was materially different from what `PrintCenter.tsx`'s thermal receipt printed: English
+  labels only, no cashier, no item table, no payment method, no disclaimer, and (a real bug found
+  in the course of this work) an invoice date/time that read `new Date()` at *render* time — so a
+  receipt reprinted days later from Orders history showed today's date, not when the order was
+  actually placed.
+- **`Organization.receiptNote`, opt-in per tenant, not fixed product copy.** The disclaimer text on
+  the reference ("not responsible for garments left unclaimed after 3 months") is one shop's
+  liability policy, not something Tailonix can assert on every tenant's behalf across a multi-tenant
+  product. Modeled exactly on the D-069 `crNumber`/`licenseNumber` precedent: nullable `VARCHAR(500)`
+  column, `manage_organization`-gated read/write through the existing `/organization` endpoint,
+  admin-editable from the same Business Profile card. Printed only when set; blank by default.
+- **Everything else needed no new configuration — it was already sitting in data the app just
+  wasn't threading through to the receipt.** `Store.address`/`Store.phone` already existed
+  (used elsewhere in Admin) but were never selected into the staff-session payload
+  (`auth.service.ts`'s `STAFF_SESSION_USER_INCLUDE`), so `StoreSummary` on the client had no way to
+  know them — added to both the `hq_admin` and per-store-role branches of `buildStaffSession()`.
+  Cashier attribution needed **no backend change at all**: a fresh checkout already has the acting
+  staff member as the live POS session (`useAuth().user.fullName` in `Receipt.tsx`), and a reprint
+  from Orders history already has `order.createdBy` (`orders.service.ts` already selected it) — the
+  two callers of `PrintCenterData` just needed to each pass the *correct* name for their situation,
+  not the viewer's.
+- **Payment method returned from checkout, not re-derived from client state.** `pos.service.ts`'s
+  `checkout()` now echoes `depositMethod` (only when `depositAmount > 0` — a SAR 0 deposit has no
+  "how was this paid" answer for a receipt to print) instead of the frontend trusting its own
+  pre-submit form state, which could in principle drift from what was actually persisted. This is
+  the same class of bug CLAUDE.md already flags by name — a stale response DTO once showed
+  "Deposit paid SAR 0.00" after a real payment — so the fix follows that lesson rather than
+  re-introducing a narrower version of it. A reprint derives it from `order.payments` instead (the
+  most recent payment's method), since by then the checkout response is long gone.
+- **The invoice date/time bug (render-time `new Date()`) is fixed by the same change that added the
+  split date/time rows.** `PrintCenterData` gained `createdAt`; `pos.service.ts`'s checkout response
+  now includes the order's real `createdAt`, and `OrderDetail.tsx`'s reprint path uses
+  `order.createdAt` directly. `PrintCenter.tsx` computes `issuedAt` from that field (falling back to
+  `new Date()` only when absent), so both fresh and reprinted receipts show the order's actual
+  issue date — verified directly: a receipt reopened from Orders history several minutes after
+  checkout still showed the original 6:14 PM timestamp, not the reprint time.
+- **Bilingual rows as a small `BiRow` component** (English label / centered value / Arabic label),
+  not a wholesale rewrite of the receipt's structure — the existing `.row`/`.rule`/`.bold`/`.small`
+  print-CSS utility classes (D-047) are still used everywhere they already fit; only the parts the
+  reference showed differently (labels, the item list, the totals block) changed shape. The item
+  list became a real bordered `<table>` (new `.doc-table` print-CSS class) instead of `.row` divs,
+  since aligning four columns (product/qty/price/total) cleanly needs actual table cells, not
+  flexbox space-between.
+- **Verification:** extended `organization.e2e-spec.ts` (round-trip `receiptNote`, reject over 500
+  chars) and `pos.e2e-spec.ts` (`depositMethod` echoed back correctly when a deposit is taken, and
+  `null` when it isn't; `createdAt` present). Full regression: 299 unit / 67 e2e tests, all four
+  frontend builds, `node tools/memory-graph.mjs --check` clean. Live-verified in the browser against
+  a real printed thermal-receipt reference, not just green tests: set a receipt note and CR/license
+  numbers in Admin, gave the Jeddah store a real address, logged into POS fresh (staff sessions
+  cache profile data at login — an existing session predating an admin edit won't show it until the
+  next login, confirmed directly by inspecting the stale vs. fresh session's cached `organization`
+  object), checked out an order with a cash deposit, and confirmed the rendered thermal receipt
+  carried every new field — bilingual labels, TAX INVOICE title, cashier name, item table, payment
+  method, item count, disclaimer, and the pickup/phone footer — both on the fresh-checkout receipt
+  and on the same order reopened from Orders history afterward.

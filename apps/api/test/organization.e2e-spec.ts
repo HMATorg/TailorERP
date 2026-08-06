@@ -44,7 +44,7 @@ describe('Organization profile (e2e)', () => {
     // leave test data behind for other suites/manual sessions to trip over.
     await prisma.organization.update({
       where: { id: orgId },
-      data: { crNumber: null, licenseNumber: null, logoUrl: null },
+      data: { crNumber: null, licenseNumber: null, receiptNote: null, logoUrl: null },
     });
     await app.close();
   });
@@ -102,6 +102,28 @@ describe('Organization profile (e2e)', () => {
       .put('/api/v1/organization')
       .set({ Authorization: `Bearer ${hqToken}` })
       .send({ logoUrl: 'https://example.com/logo.png' })
+      .expect(400);
+  });
+
+  it('round-trips the thermal-receipt note and rejects one over 500 characters (D-072)', async () => {
+    const note = 'Not responsible for garments left unclaimed after 3 months.';
+    const put = await request(app.getHttpServer())
+      .put('/api/v1/organization')
+      .set({ Authorization: `Bearer ${hqToken}` })
+      .send({ receiptNote: note })
+      .expect(200);
+    expect(put.body.receiptNote).toBe(note);
+
+    const get = await request(app.getHttpServer())
+      .get('/api/v1/organization')
+      .set({ Authorization: `Bearer ${hqToken}` })
+      .expect(200);
+    expect(get.body.receiptNote).toBe(note);
+
+    await request(app.getHttpServer())
+      .put('/api/v1/organization')
+      .set({ Authorization: `Bearer ${hqToken}` })
+      .send({ receiptNote: 'x'.repeat(501) })
       .expect(400);
   });
 });

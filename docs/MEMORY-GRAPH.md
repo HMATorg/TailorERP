@@ -6,7 +6,7 @@
 > the repo — why something is blocked, what a trap looks like — belongs in the
 > auto-memory directory, not here.
 
-**Parent** `7ea2425` on `main` · **generated** 2026-08-06 12:24Z · staged into the commit being created on top of it
+**Parent** `681c866` on `main` · **generated** 2026-08-06 13:22Z · staged into the commit being created on top of it
 
 _History below runs to the parent; the commit carrying this file is its child._
 
@@ -92,7 +92,7 @@ graph LR
 
 ## Data model
 
-37 models, 28 enums, 16 migrations.
+37 models, 28 enums, 17 migrations.
 
 <details><summary>Models</summary>
 
@@ -118,10 +118,11 @@ graph LR
 | 14 | `20260803000000_split_length_sleeve_trouser_pallas` |
 | 15 | `20260804000000_add_org_cr_license_customer_vat_address` |
 | 16 | `20260806000000_add_button_designs` |
+| 17 | `20260806120000_add_org_receipt_note` |
 
 ## Engineering decisions
 
-71 recorded in `docs/ENGINEERING-DECISIONS.md`. "Cited by" counts source
+72 recorded in `docs/ENGINEERING-DECISIONS.md`. "Cited by" counts source
 files that reference the decision in a comment — an uncited decision is not wrong,
 but it is the first place to look when something has quietly been undone.
 
@@ -198,6 +199,7 @@ but it is the first place to look when something has quietly been undone.
 | `D-069` | A competitor's receipt showed what ours was missing — CR/license number, a logo, buyer VAT | 16 file(s) |
 | `D-070` | Self-hosted Redis on Railway, replacing the Upstash free tier | — |
 | `D-071` | Per-shop button catalog, graphic style selectors, and per-point measurement diagrams | 10 file(s) |
+| `D-072` | Thermal receipt redesigned to match a real Saudi tailor shop's layout | 9 file(s) |
 
 ## Tests
 
@@ -213,6 +215,7 @@ currently skipped. They are a shape check, not a substitute for running the suit
 
 | Commit | Date | Subject |
 | --- | --- | --- |
+| `681c866` | 2026-08-06 | Restyle POS Counter: full-width Measurements/Garments sections, field grid |
 | `7ea2425` | 2026-08-06 | Add per-shop button catalog, graphic style selectors, per-point diagrams (D-071) |
 | `2f793c4` | 2026-08-06 | Add VAT ID/address to customers, CR/license number and logo to invoices (D-069) |
 | `0a04164` | 2026-08-03 | Split M1/M3 measurements into front/back and left/right, add trouser palla list (D-068) |
