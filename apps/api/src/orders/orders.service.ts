@@ -247,6 +247,7 @@ export class OrdersService {
               },
             },
             measurement: { select: { id: true, garmentType: true, version: true } },
+            buttonDesign: { select: { id: true, serialNumber: true, imageUrl: true, label: true } },
           },
         },
         statusHistory: {

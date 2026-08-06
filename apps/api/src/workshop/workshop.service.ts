@@ -129,6 +129,7 @@ export class WorkshopService {
           include: {
             measurement: true,
             fabrics: { include: { batch: { select: { batchCode: true, fabricName: true } } } },
+            buttonDesign: { select: { id: true, serialNumber: true, imageUrl: true, label: true } },
           },
         },
         history: {

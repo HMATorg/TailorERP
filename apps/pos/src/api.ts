@@ -24,6 +24,13 @@ export interface StoreSummary {
   permissions?: Permission[];
 }
 
+export interface ButtonDesign {
+  id: string;
+  serialNumber: string;
+  imageUrl: string;
+  label: string | null;
+}
+
 export interface OrganizationSummary {
   id: string;
   name: string;

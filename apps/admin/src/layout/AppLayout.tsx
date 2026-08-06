@@ -7,6 +7,7 @@ import {
   CreditCardOutlined,
   DashboardOutlined,
   FileTextOutlined,
+  GoldOutlined,
   InboxOutlined,
   LogoutOutlined,
   SafetyCertificateOutlined,
@@ -47,6 +48,7 @@ export default function AppLayout() {
             { key: '/stores', icon: <ShopOutlined />, label: <Link to="/stores">{t('nav.stores')}</Link> },
             { key: '/billing', icon: <CreditCardOutlined />, label: <Link to="/billing">{t('nav.billing')}</Link> },
             { key: '/ledger', icon: <BookOutlined />, label: <Link to="/ledger">{t('nav.ledger')}</Link> },
+            { key: '/buttons', icon: <GoldOutlined />, label: <Link to="/buttons">{t('nav.buttons')}</Link> },
             {
               key: '/settings',
               icon: <SafetyCertificateOutlined />,

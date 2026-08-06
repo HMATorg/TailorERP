@@ -251,6 +251,21 @@ export default function Workshop() {
               <Descriptions.Item label="Pocket">{pretty(scanned.orderItem.pocketStyle)}</Descriptions.Item>
               <Descriptions.Item label="Stitching">{pretty(scanned.orderItem.stitchingStyle)}</Descriptions.Item>
               <Descriptions.Item label="Fabric needed">{scanned.orderItem.yieldMeters}m</Descriptions.Item>
+              {scanned.orderItem.buttonDesign && (
+                <Descriptions.Item label="Button">
+                  <Space>
+                    <img
+                      src={scanned.orderItem.buttonDesign.imageUrl}
+                      alt={scanned.orderItem.buttonDesign.serialNumber}
+                      style={{ width: 32, height: 32, objectFit: 'contain', background: '#FAFAFA', borderRadius: 4 }}
+                    />
+                    <span>
+                      #{scanned.orderItem.buttonDesign.serialNumber}
+                      {scanned.orderItem.buttonDesign.label ? ` — ${scanned.orderItem.buttonDesign.label}` : ''}
+                    </span>
+                  </Space>
+                </Descriptions.Item>
+              )}
             </Descriptions>
 
             {measure?.cutAgainst && (

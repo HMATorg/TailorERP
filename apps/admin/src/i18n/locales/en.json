@@ -30,7 +30,8 @@
     "settings": "Settings",
     "invoices": "Invoices",
     "billing": "Billing",
-    "ledger": "Ledger"
+    "ledger": "Ledger",
+    "buttons": "Buttons"
   },
   "store": {
     "allStores": "All Stores (HQ Overview)",

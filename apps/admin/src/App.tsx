@@ -5,6 +5,7 @@ import Alerts from './pages/Alerts';
 import Appointments from './pages/Appointments';
 import BatchDetail from './pages/BatchDetail';
 import Billing from './pages/Billing';
+import Buttons from './pages/Buttons';
 import Customers from './pages/Customers';
 import Dashboard from './pages/Dashboard';
 import Impersonate from './pages/Impersonate';
@@ -41,6 +42,7 @@ export default function App() {
           <Route path="/stores" element={<Stores />} />
           <Route path="/billing" element={<Billing />} />
           <Route path="/ledger" element={<Ledger />} />
+          <Route path="/buttons" element={<Buttons />} />
           <Route path="/settings" element={<Settings />} />
         </Route>
       </Routes>

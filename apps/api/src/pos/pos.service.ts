@@ -230,6 +230,18 @@ export class PosService {
     if (!customer) throw new NotFoundException('Customer not found in your organization');
     if (dto.items.length === 0) throw new BadRequestException('At least one garment is required');
 
+    // A button id belonging to another org must fail cleanly here, not as a
+    // raw FK violation once the transaction below tries to write it.
+    const buttonIds = [...new Set(dto.items.map((i) => i.buttonDesignId).filter((id): id is string => !!id))];
+    if (buttonIds.length > 0) {
+      const ownedCount = await this.prisma.buttonDesign.count({
+        where: { id: { in: buttonIds }, organizationId: orgId },
+      });
+      if (ownedCount !== buttonIds.length) {
+        throw new BadRequestException('One or more selected buttons were not found in your organization');
+      }
+    }
+
     // Resolve measurements and yields up front so we fail before writing anything.
     const prepared: {
       item: PosCheckoutDto['items'][number];
@@ -308,6 +320,7 @@ export class PosService {
             stitchingStyle: p.item.stitchingStyle,
             cutStyle: p.item.cutStyle,
             cufflinkSize: p.item.cufflinkSize,
+            buttonDesignId: p.item.buttonDesignId,
             yieldMeters: p.yieldMeters,
           },
         });

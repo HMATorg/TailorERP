@@ -1811,3 +1811,96 @@ as filed when it was not.
   browser: Admin's new Business Profile card (upload → preview → save → reload confirms
   persistence), a checked-out thermal receipt showing the logo/CR/license/buyer VAT, and a
   downloaded A4 PDF with the shifted header.
+
+## D-070: Self-hosted Redis on Railway, replacing the Upstash free tier
+
+- **Trigger:** the user upgraded their Railway plan (previously capped at 5 services, which is why
+  `pwa` had been removed under D-061) and asked to move off Upstash's free-tier Redis, which had
+  hit its monthly request cap and was throttling BullMQ jobs and OTP/session reads in production.
+- **A genuinely self-hosted Redis service on Railway, not another managed free tier.** The plan
+  upgrade removed the service-count constraint that made Upstash's serverless-Redis convenience
+  worth its request cap in the first place; a plan-included Redis instance on Railway's own network
+  has no such cap and sits on the same private network as the API, so `RAILWAY_PRIVATE_DOMAIN`
+  resolves it without a public endpoint or TLS termination.
+- **No code changes were required.** D-067's `redisConnectionOptions()` (`redis-connection.ts`)
+  already builds its `RedisOptions` from `REDIS_HOST`/`REDIS_PORT`/`REDIS_PASSWORD`/`REDIS_TLS`
+  rather than hardcoding an Upstash `rediss://` URL, specifically so a managed-vs-self-hosted swap
+  would be a Railway variable change, not a deploy. Swapping providers is exactly the case that
+  option existed for.
+- **Verification:** `/health` reported a clean Redis check post-cutover and API logs showed zero
+  Redis-related errors after the swap — BullMQ queues, the reorder cron, and OTP session reads all
+  read/write against the new instance with no code path left pointing at Upstash.
+- **Deferred, not resolved in the same session:** redeploying `pwa` (now that the plan supports a
+  6th service) ran into a Railpack "no start command detected" / static-serve "npm not found" loop
+  across several configuration attempts; root cause wasn't isolated before the user asked to move
+  on to other work. A stray "TailorERP" Railway service was accidentally created during that
+  troubleshooting (via `create-deployment` without a `name`, which creates a new service rather
+  than redeploying an existing one) — it was put to sleep immediately, disclosed to the user, and
+  still needs manual deletion from the Railway dashboard since no delete-service tool is available
+  here. `pwa`'s live status remains unverified; do not resume this without the user raising it.
+
+## D-071: Per-shop button catalog, graphic style selectors, and per-point measurement diagrams
+
+- **Trigger:** the user supplied three references from a real shop — a paper measurement order
+  form with small per-field sketches next to each measurement (not one shared body outline), a
+  photo of a physical buttons reference board (~48 numbered buttons, each with its own photo), and
+  a technical icon chart enumerating collar/cuff/pocket style variants by number. The ask: POS
+  measurement entry should show a reference image specific to each field rather than one generic
+  diagram; collar/cuff/pocket ("neck and makfi") pickers should be graphic selectors instead of
+  text dropdowns; and admin should be able to feed a photographed button catalog (image + serial +
+  optional label) that staff pick from at the POS instead of typing a button description.
+- **Buttons modeled as their own entity (`ButtonDesign`), not a free-text/enum field on
+  `OrderItem`.** A real shop's board has ~48 numbered options and grows over time as new stock
+  arrives — an enum would need a migration per addition, and free text would let two staff spell
+  the same button two different ways, breaking any future "which button did we use most" report.
+  `OrderItem.buttonDesignId` is a nullable FK (`ON DELETE SET NULL`) rather than required, since
+  older order items and organizations that never populate the catalog must keep working unchanged.
+- **Button images reuse the D-069 data-URI-in-DB pattern** (`ButtonDesign.imageUrl`, same
+  500,000-char base64 cap and `image/(png|jpeg|webp)` regex as `Organization.logoUrl`) rather than
+  introducing S3 for this feature — the same reasoning applies: small catalog thumbnails rendered
+  directly in `<img>` tags on a POS tablet, no need for presigned-URL expiry machinery. Reusing an
+  already-proven pattern here also means no new body-size or CORS configuration was needed.
+- **Soft-deactivation (`isActive`), not hard delete, for retired buttons.** Past orders reference a
+  `buttonDesignId`; deleting the row would either cascade-null historical order items (losing what
+  was actually used) or block the deactivation entirely. `list()` defaults to active-only for the
+  POS picker so retired buttons stop appearing as choices, while `includeInactive` keeps them
+  visible in the admin management view and on any order that already used one.
+- **Audit log never stores the button's raw image**, matching the D-069 logo precedent — only
+  `serialNumber`/`label` (and `isActive` on update) are recorded, proven by a dedicated unit test
+  asserting the serialized audit entry never contains the payload.
+- **Graphic collar/cuff/pocket selectors are hand-drawn inline SVG glyphs keyed by the existing
+  option `value` strings** (`apps/pos/src/components/StyleIcons.tsx`), not photos — unlike buttons,
+  a shop doesn't hand this catalog to admin to photograph; the glyph only needs to disambiguate
+  which of 2-4 fixed, code-defined variants a tailor means, the way the reference icon chart did.
+  Reused `COLLAR_OPTIONS`/`CUFF_OPTIONS`/`POCKET_OPTIONS` as the single source of labels/values so
+  the icon picker can't drift from the checkout payload's actual enum values. Stitching stayed a
+  plain `Select` — the user's ask named pocket, neck (collar), and makfi (cuff) specifically, not
+  stitching, and a text list is the right amount of UI for three unambiguous style names.
+- **Per-point measurement reference diagrams crop the SAME outline, not new art per point**
+  (`MeasurementDiagram.tsx`'s `PointThumbnail`). Every hotspot already carries `target`/`span`
+  coordinates against the shared `RobeOutline`/`TrousersOutline` path data (D-068 and earlier); a
+  thumbnail is just that same outline rendered again with its `viewBox` cropped and zoomed to a
+  bounding box around one point's own target/span, floored at a minimum size so a single-dot point
+  (no span) doesn't zoom in to nothing. Splitting the outline's path strings into constants let the
+  full diagram and every thumbnail share one geometry definition — one path edited once stays
+  correct everywhere it's drawn, instead of 15 independent copies drifting apart. The thumbnail
+  variant skips the full diagram's `<defs>` gradient (flat fill instead) specifically to avoid
+  duplicate `id="robeFill"`/`id="trouserFill"` when a dozen thumbnails render on the same page.
+- **The button gallery picker (`ButtonPicker.tsx`) fetches the org's catalog once per counter
+  session**, not per garment tab — buttons are organization-wide, not per-customer or per-garment,
+  so re-fetching on every tab switch would be pure waste. Selecting an already-selected button
+  deselects it (a garment doesn't have to carry a button choice at all).
+- **Verification:** `buttons.service.spec.ts` (5 cases) plus a new `buttons.e2e-spec.ts` (6 cases —
+  `manage_organization`-gated writes vs. `use_pos`-gated reads, duplicate-serial conflict, a
+  non-image `imageUrl` rejection, the active/inactive list filter, and a foreign-org
+  `buttonDesignId` rejected at checkout with a purpose-built cross-org fixture). Full regression:
+  299 API unit tests, 66 e2e tests (7 suites), all four frontend builds, and
+  `node tools/memory-graph.mjs --check` all clean. Live-verified end to end in the browser, not
+  just against green tests: uploaded a real button (photo + serial `153` + label "Pearl round")
+  through Admin's new Buttons page, confirmed it rendered in POS's gallery picker on a fresh page
+  load, selected it alongside graphic collar/cuff/pocket choices, confirmed each measurement field
+  now shows its own distinct cropped reference diagram (verified M1F/M1B/M2 and M5-M10 render
+  visibly different crops, not the same image repeated), checked the garment out, and confirmed the
+  Workshop ticket-scan view (logged in as a `view_workshop`-permitted user) displays the exact
+  button photo, serial, and label chosen at the counter alongside the existing collar/cuff/pocket/
+  stitching fields.

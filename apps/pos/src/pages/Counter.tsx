@@ -12,7 +12,6 @@ import {
   Input,
   InputNumber,
   Row,
-  Segmented,
   Select,
   Space,
   Spin,
@@ -35,10 +34,13 @@ import {
   garmentFamily,
   measurementPointsFor,
   requiredMeasurementKeysFor,
+  type ButtonDesign,
   type MeasurementKey,
 } from '../api';
+import ButtonPicker from '../components/ButtonPicker';
 import CustomerPicker from '../components/CustomerPicker';
 import MeasurementDiagram from '../components/MeasurementDiagram';
+import StyleIconPicker from '../components/StyleIcons';
 
 interface Roll {
   id: string;
@@ -64,6 +66,7 @@ interface Garment {
   stitchingStyle?: string;
   cutStyle?: string;
   cufflinkSize?: string;
+  buttonDesignId?: string;
   unitPrice: number;
 }
 
@@ -110,6 +113,15 @@ export default function Counter() {
   const [notes, setNotes] = useState('');
   const [isUrgent, setIsUrgent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [buttons, setButtons] = useState<ButtonDesign[]>([]);
+
+  // Org-wide catalog, not per-customer — loaded once per counter session.
+  useEffect(() => {
+    api
+      .get<ButtonDesign[]>('/buttons')
+      .then(({ data }) => setButtons(data))
+      .catch(() => setButtons([]));
+  }, []);
 
   const customer = lookup?.found ? lookup.customer : null;
   const activeGarmentType = garments[Number(activeTab)]?.garmentType ?? 'Thobe';
@@ -281,6 +293,7 @@ export default function Counter() {
           stitchingStyle: g.stitchingStyle,
           cutStyle: g.cutStyle,
           cufflinkSize: g.cufflinkSize || undefined,
+          buttonDesignId: g.buttonDesignId,
           unitPrice: g.unitPrice,
         })),
       });
@@ -495,36 +508,32 @@ export default function Counter() {
 
                           <div>
                             <div style={{ fontSize: 13, color: '#757575' }}>Collar</div>
-                            <Segmented
-                              size="large"
-                              block
+                            <StyleIconPicker
+                              options={COLLAR_OPTIONS}
                               value={g.collarStyle}
-                              onChange={(v) => update(i, { collarStyle: String(v) })}
-                              options={COLLAR_OPTIONS.map((o) => ({ value: o.value, label: o.en }))}
+                              onChange={(v) => update(i, { collarStyle: v })}
                             />
                           </div>
                           <div>
                             <div style={{ fontSize: 13, color: '#757575' }}>Cuff</div>
-                            <Segmented
-                              size="large"
-                              block
+                            <StyleIconPicker
+                              options={CUFF_OPTIONS}
                               value={g.cuffStyle}
-                              onChange={(v) => update(i, { cuffStyle: String(v) })}
-                              options={CUFF_OPTIONS.map((o) => ({ value: o.value, label: o.en }))}
+                              onChange={(v) => update(i, { cuffStyle: v })}
+                              columns={2}
+                            />
+                          </div>
+                          <div>
+                            <div style={{ fontSize: 13, color: '#757575' }}>Pocket</div>
+                            <StyleIconPicker
+                              options={POCKET_OPTIONS}
+                              value={g.pocketStyle}
+                              onChange={(v) => update(i, { pocketStyle: v })}
+                              columns={3}
                             />
                           </div>
                           <Row gutter={12}>
-                            <Col span={12}>
-                              <div style={{ fontSize: 13, color: '#757575' }}>Pocket</div>
-                              <Select
-                                size="large"
-                                style={{ width: '100%' }}
-                                value={g.pocketStyle}
-                                onChange={(v) => update(i, { pocketStyle: v })}
-                                options={POCKET_OPTIONS.map((o) => ({ value: o.value, label: o.en }))}
-                              />
-                            </Col>
-                            <Col span={12}>
+                            <Col span={24}>
                               <div style={{ fontSize: 13, color: '#757575' }}>Stitching</div>
                               <Select
                                 size="large"
@@ -535,6 +544,22 @@ export default function Counter() {
                               />
                             </Col>
                           </Row>
+
+                          {g.garmentType !== 'Trousers' && (
+                            <div>
+                              <div style={{ fontSize: 13, color: '#757575' }}>
+                                Button{' '}
+                                {g.buttonDesignId && (
+                                  <Tag color="blue">#{buttons.find((b) => b.id === g.buttonDesignId)?.serialNumber}</Tag>
+                                )}
+                              </div>
+                              <ButtonPicker
+                                buttons={buttons}
+                                value={g.buttonDesignId}
+                                onChange={(v) => update(i, { buttonDesignId: v })}
+                              />
+                            </div>
+                          )}
 
                           {g.garmentType !== 'Trousers' && (
                             <Row gutter={12}>

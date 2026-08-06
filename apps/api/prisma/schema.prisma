@@ -265,6 +265,7 @@ model Organization {
   auditLogs        AuditLog[]
   ledgerAccounts   LedgerAccount[]
   journalEntries   JournalEntry[]
+  buttonDesigns    ButtonDesign[]
 
   @@map("organizations")
 }
@@ -793,6 +794,36 @@ model Order {
   @@map("orders")
 }
 
+/// A shop's own physical button stock (D-071) — admin photographs and
+/// numbers each button they carry, mirroring the paper reference boards real
+/// tailor shops already keep pinned by the counter. Distinct from
+/// `OrderItem.cufflinkSize` (a manufacturing dimension like "9x3"): this is
+/// *which* button design was picked from the shop's own catalog, not how big
+/// it is. Org-wide, not per-store — the same button stock serves every branch.
+model ButtonDesign {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  /// The number written on the shop's physical reference board (e.g. "153").
+  /// Not a database identity — two different physical buttons a shop retired
+  /// and later reused a number for would just be two rows; nothing enforces
+  /// real-world uniqueness beyond the shop's own bookkeeping discipline.
+  serialNumber   String   @map("serial_number") @db.VarChar(20)
+  /// A data URI, same storage choice as Organization.logoUrl (D-069) — a
+  /// small catalog thumbnail with no need for S3's signed-URL machinery.
+  imageUrl       String   @map("image_url")
+  label          String?  @db.VarChar(100)
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  orderItems   OrderItem[]
+
+  @@unique([organizationId, serialNumber])
+  @@index([organizationId, isActive])
+  @@map("button_designs")
+}
+
 model OrderItem {
   id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   orderId       String   @map("order_id") @db.Uuid
@@ -815,6 +846,9 @@ model OrderItem {
   /// Free text (e.g. "9x3") — a manufacturing spec, not a body measurement, so it
   /// doesn't belong in the Measurement matrix (D-055)
   cufflinkSize   String?         @map("cufflink_size") @db.VarChar(20)
+  /// Which of the shop's own catalogued buttons to use (D-071) — separate
+  /// from cufflinkSize above, which is a dimension, not a design choice.
+  buttonDesignId String?         @map("button_design_id") @db.Uuid
 
   /// Fabric metres computed by the yield formula and held against a roll
   yieldMeters   Decimal? @map("yield_meters") @db.Decimal(12, 2)
@@ -823,12 +857,14 @@ model OrderItem {
 
   order       Order             @relation(fields: [orderId], references: [id], onDelete: Cascade)
   measurement Measurement?      @relation(fields: [measurementId], references: [id])
+  buttonDesign ButtonDesign?    @relation(fields: [buttonDesignId], references: [id])
   fabrics     OrderItemFabric[]
   reservations FabricReservation[]
   ticket      ProductionTicket?
 
   @@index([orderId])
   @@index([measurementId])
+  @@index([buttonDesignId])
   @@map("order_items")
 }
 

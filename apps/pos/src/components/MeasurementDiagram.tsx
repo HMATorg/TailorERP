@@ -72,50 +72,64 @@ const TROUSER_HOTSPOTS: Record<string, HotspotLayout> = {
   t7AnkleOpening: { x: 278, y: 230, targetX: 190, targetY: 350, span: { x1: 148, y1: 350, x2: 206, y2: 350 } },
 };
 
-function RobeOutline() {
+const ROBE_BODY_D =
+  'M130 35 Q160 20 190 35 L225 55 L255 145 L235 155 L225 115 L225 355 L95 355 L95 115 L85 155 L65 145 L95 55 Z';
+const ROBE_COLLAR_D = 'M130 35 Q160 55 190 35';
+const TROUSER_BODY_D =
+  'M120 50 Q160 36 200 50 L206 188 L206 350 L172 350 L168 196 L152 196 L148 350 L114 350 L114 188 Z';
+const TROUSER_WAISTBAND_D = 'M120 50 Q160 40 200 50';
+
+/** `thumb` skips the `<defs>` gradient — cheap and, more importantly, avoids
+ * duplicate `id="robeFill"`/`id="trouserFill"` when a dozen per-point
+ * thumbnails (below) each render their own copy of this outline. */
+function RobeOutline({ thumb }: { thumb?: boolean } = {}) {
   return (
     <>
-      <defs>
-        <linearGradient id="robeFill" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#F1FAF9" />
-          <stop offset="100%" stopColor="#CFEDE9" />
-        </linearGradient>
-      </defs>
+      {!thumb && (
+        <defs>
+          <linearGradient id="robeFill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#F1FAF9" />
+            <stop offset="100%" stopColor="#CFEDE9" />
+          </linearGradient>
+        </defs>
+      )}
       {/* Thobe/Bisht/Shirt outline: neck, shoulders, sleeves, body flaring to the hem */}
       <path
-        d="M130 35 Q160 20 190 35 L225 55 L255 145 L235 155 L225 115 L225 355 L95 355 L95 115 L85 155 L65 145 L95 55 Z"
-        fill="url(#robeFill)"
+        d={ROBE_BODY_D}
+        fill={thumb ? '#DCEEEC' : 'url(#robeFill)'}
         stroke="#00695C"
         strokeWidth="2.5"
         strokeLinejoin="round"
       />
       {/* collar opening */}
-      <path d="M130 35 Q160 55 190 35" fill="none" stroke="#00695C" strokeWidth="2.5" />
+      <path d={ROBE_COLLAR_D} fill="none" stroke="#00695C" strokeWidth="2.5" />
       {/* front placket */}
       <line x1="160" y1="45" x2="160" y2="150" stroke="#00695C" strokeWidth="1.5" strokeDasharray="4 3" />
     </>
   );
 }
 
-function TrousersOutline() {
+function TrousersOutline({ thumb }: { thumb?: boolean } = {}) {
   return (
     <>
-      <defs>
-        <linearGradient id="trouserFill" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#F1FAF9" />
-          <stop offset="100%" stopColor="#CFEDE9" />
-        </linearGradient>
-      </defs>
+      {!thumb && (
+        <defs>
+          <linearGradient id="trouserFill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#F1FAF9" />
+            <stop offset="100%" stopColor="#CFEDE9" />
+          </linearGradient>
+        </defs>
+      )}
       {/* Waistband, splitting into two legs at the crotch */}
       <path
-        d="M120 50 Q160 36 200 50 L206 188 L206 350 L172 350 L168 196 L152 196 L148 350 L114 350 L114 188 Z"
-        fill="url(#trouserFill)"
+        d={TROUSER_BODY_D}
+        fill={thumb ? '#DCEEEC' : 'url(#trouserFill)'}
         stroke="#00695C"
         strokeWidth="2.5"
         strokeLinejoin="round"
       />
       {/* waistband line */}
-      <path d="M120 50 Q160 40 200 50" fill="none" stroke="#00695C" strokeWidth="2.5" />
+      <path d={TROUSER_WAISTBAND_D} fill="none" stroke="#00695C" strokeWidth="2.5" />
       {/* centre crease on each leg */}
       <line x1="189" y1="80" x2="189" y2="340" stroke="#00695C" strokeWidth="1" strokeDasharray="4 3" />
       <line x1="131" y1="80" x2="131" y2="340" stroke="#00695C" strokeWidth="1" strokeDasharray="4 3" />
@@ -142,6 +156,41 @@ function DimensionLine({ x1, y1, x2, y2 }: { x1: number; y1: number; x2: number;
         </>
       )}
     </g>
+  );
+}
+
+/**
+ * A tight crop of the same body outline around one point's own region — each
+ * measurement field gets its own reference picture instead of everyone
+ * sharing the single full-body diagram (D-071). Reuses `RobeOutline`/
+ * `TrousersOutline` and each hotspot's existing `target`/`span` data; no new
+ * illustration work, just a `viewBox` that zooms into that point's corner.
+ */
+function PointThumbnail({ spot, isTrousers }: { spot: HotspotLayout; isTrousers: boolean }) {
+  const xs = [spot.targetX, spot.span?.x1, spot.span?.x2].filter((n): n is number => n != null);
+  const ys = [spot.targetY, spot.span?.y1, spot.span?.y2].filter((n): n is number => n != null);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  const pad = 34;
+  const cx = (minX + maxX) / 2;
+  const cy = (minY + maxY) / 2;
+  const size = Math.max(maxX - minX, maxY - minY, 70) + pad * 2;
+  const vx = cx - size / 2;
+  const vy = cy - size / 2;
+  return (
+    <svg
+      viewBox={`${vx} ${vy} ${size} ${size}`}
+      width={48}
+      height={48}
+      style={{ border: '1px solid #E0E0E0', borderRadius: 6, background: '#FAFAFA', flexShrink: 0 }}
+      aria-hidden
+    >
+      {isTrousers ? <TrousersOutline thumb /> : <RobeOutline thumb />}
+      {spot.span && <DimensionLine {...spot.span} />}
+      <circle cx={spot.targetX} cy={spot.targetY} r={5} fill="#FFA000" stroke="#fff" strokeWidth={1.5} />
+    </svg>
   );
 }
 
@@ -261,6 +310,7 @@ export default function MeasurementDiagram({ points = MEASUREMENT_POINTS, values
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: 12, flex: 1, minWidth: 260 }}>
           {points.map((point) => {
             const active = activeKey === point.key;
+            const spot = hotspots[point.key];
             return (
               <div
                 key={point.key}
@@ -277,16 +327,19 @@ export default function MeasurementDiagram({ points = MEASUREMENT_POINTS, values
                   transition: 'background 0.15s, box-shadow 0.15s',
                 }}
               >
-                <div style={{ fontSize: 13, color: '#757575', marginBlockEnd: 4 }}>
-                  <Tooltip title={`${point.en} — ${point.ar}`}>
-                    <b
-                      style={{ color: '#00695C', cursor: 'pointer' }}
-                      onClick={() => focusPoint(point.key)}
-                    >
-                      {point.code}
-                    </b>
-                  </Tooltip>{' '}
-                  {label(point)}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBlockEnd: 4 }}>
+                  {spot && <PointThumbnail spot={spot} isTrousers={isTrousers} />}
+                  <div style={{ fontSize: 13, color: '#757575' }}>
+                    <Tooltip title={`${point.en} — ${point.ar}`}>
+                      <b
+                        style={{ color: '#00695C', cursor: 'pointer' }}
+                        onClick={() => focusPoint(point.key)}
+                      >
+                        {point.code}
+                      </b>
+                    </Tooltip>{' '}
+                    {label(point)}
+                  </div>
                 </div>
                 <InputNumber
                   ref={(el) => {

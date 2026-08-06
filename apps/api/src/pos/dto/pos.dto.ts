@@ -67,6 +67,11 @@ export class PosGarmentDto {
   @IsOptional()
   cufflinkSize?: string;
 
+  /** Which of the shop's own catalogued buttons to use (D-071) — distinct from cufflinkSize above. */
+  @IsUUID()
+  @IsOptional()
+  buttonDesignId?: string;
+
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   unitPrice: number;

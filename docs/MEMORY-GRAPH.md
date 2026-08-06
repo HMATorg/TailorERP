@@ -6,7 +6,7 @@
 > the repo — why something is blocked, what a trap looks like — belongs in the
 > auto-memory directory, not here.
 
-**Parent** `0a04164` on `main` · **generated** 2026-08-06 09:57Z · staged into the commit being created on top of it
+**Parent** `2f793c4` on `main` · **generated** 2026-08-06 11:25Z · staged into the commit being created on top of it
 
 _History below runs to the parent; the commit carrying this file is its child._
 
@@ -50,15 +50,15 @@ graph LR
 
 | App | Package | Dev port | TS/TSX files | Direct deps |
 | --- | --- | --- | --- | --- |
-| `apps/admin` | `@tailonix/admin` | 5173 | 34 | 12 |
-| `apps/api` | `@tailonix/api` | 3000 | 154 | 24 |
+| `apps/admin` | `@tailonix/admin` | 5173 | 35 | 12 |
+| `apps/api` | `@tailonix/api` | 3000 | 160 | 24 |
 | `apps/platform-admin` | `@tailonix/platform-admin` | 5175 | 15 | 9 |
-| `apps/pos` | `@tailonix/pos` | 5176 | 20 | 14 |
+| `apps/pos` | `@tailonix/pos` | 5176 | 22 | 14 |
 | `apps/pwa` | `@tailonix/pwa` | 5174 | 15 | 10 |
 
 ## API modules
 
-26 feature modules, all wired into `AppModule`.
+27 feature modules, all wired into `AppModule`.
 
 | Module | Path | Depends on |
 | --- | --- | --- |
@@ -66,6 +66,7 @@ graph LR
 | `AuditModule` | `apps/api/src/audit/audit.module.ts` | — |
 | `AuthModule` | `apps/api/src/auth/auth.module.ts` | `FeatureGateModule` |
 | `BillingModule` | `apps/api/src/billing/billing.module.ts` | `AuthModule`, `FeatureGateModule` |
+| `ButtonsModule` | `apps/api/src/buttons/buttons.module.ts` | — |
 | `CommonModule` | `apps/api/src/common/common.module.ts` | — |
 | `CustomerModule` | `apps/api/src/customer-api/customer.module.ts` | `AppointmentsModule`, `MeasurementsModule` |
 | `CustomersModule` | `apps/api/src/customers/customers.module.ts` | `MeasurementsModule` |
@@ -91,11 +92,11 @@ graph LR
 
 ## Data model
 
-36 models, 28 enums, 15 migrations.
+37 models, 28 enums, 16 migrations.
 
 <details><summary>Models</summary>
 
-`Appointment` · `AuditLog` · `Customer` · `CustomerDevice` · `CustomerStoreVisit` · `DocumentCounter` · `FabricReservation` · `InventoryBatch` · `InventoryMovement` · `InventoryReorderSetting` · `InventoryRestockAlert` · `Invitation` · `Invoice` · `JournalEntry` · `LedgerAccount` · `LedgerLine` · `Measurement` · `Notification` · `Order` · `OrderItem` · `OrderItemFabric` · `OrderStatusHistory` · `Organization` · `OrganizationSubscription` · `Payment` · `PlatformAdmin` · `ProductionTicket` · `ProductionTicketHistory` · `RefreshToken` · `Store` · `SubscriptionPlan` · `Supplier` · `User` · `UserStoreRole` · `WhatsappMessage` · `WhatsappTemplate`
+`Appointment` · `AuditLog` · `ButtonDesign` · `Customer` · `CustomerDevice` · `CustomerStoreVisit` · `DocumentCounter` · `FabricReservation` · `InventoryBatch` · `InventoryMovement` · `InventoryReorderSetting` · `InventoryRestockAlert` · `Invitation` · `Invoice` · `JournalEntry` · `LedgerAccount` · `LedgerLine` · `Measurement` · `Notification` · `Order` · `OrderItem` · `OrderItemFabric` · `OrderStatusHistory` · `Organization` · `OrganizationSubscription` · `Payment` · `PlatformAdmin` · `ProductionTicket` · `ProductionTicketHistory` · `RefreshToken` · `Store` · `SubscriptionPlan` · `Supplier` · `User` · `UserStoreRole` · `WhatsappMessage` · `WhatsappTemplate`
 
 </details>
 
@@ -116,10 +117,11 @@ graph LR
 | 13 | `20260729184725_add_zatca_onboarding_stage` |
 | 14 | `20260803000000_split_length_sleeve_trouser_pallas` |
 | 15 | `20260804000000_add_org_cr_license_customer_vat_address` |
+| 16 | `20260806000000_add_button_designs` |
 
 ## Engineering decisions
 
-69 recorded in `docs/ENGINEERING-DECISIONS.md`. "Cited by" counts source
+71 recorded in `docs/ENGINEERING-DECISIONS.md`. "Cited by" counts source
 files that reference the decision in a comment — an uncited decision is not wrong,
 but it is the first place to look when something has quietly been undone.
 
@@ -193,13 +195,15 @@ but it is the first place to look when something has quietly been undone.
 | `D-066` | POS audit — Workshop cards didn't open, garment tags didn't print, every role saw every screen | 2 file(s) |
 | `D-067` | Production Redis was never actually reachable — silently, since the first deploy | — |
 | `D-068` | M1/M3 split into front/back and left/right, plus an open-ended trouser palla list | 11 file(s) |
-| `D-069` | A competitor's receipt showed what ours was missing — CR/license number, a logo, buyer VAT | 13 file(s) |
+| `D-069` | A competitor's receipt showed what ours was missing — CR/license number, a logo, buyer VAT | 16 file(s) |
+| `D-070` | Self-hosted Redis on Railway, replacing the Upstash free tier | — |
+| `D-071` | Per-shop button catalog, graphic style selectors, and per-point measurement diagrams | 10 file(s) |
 
 ## Tests
 
 | Suite | Files | Declared cases |
 | --- | --- | --- |
-| unit | 26 | 287 |
+| unit | 27 | 292 |
 | e2e | 0 | 0 |
 
 Counts are parsed from `it(` / `test(` call sites, so they include any case that is
@@ -209,6 +213,7 @@ currently skipped. They are a shape check, not a substitute for running the suit
 
 | Commit | Date | Subject |
 | --- | --- | --- |
+| `2f793c4` | 2026-08-06 | Add VAT ID/address to customers, CR/license number and logo to invoices (D-069) |
 | `0a04164` | 2026-08-03 | Split M1/M3 measurements into front/back and left/right, add trouser palla list (D-068) |
 | `7d3fe1c` | 2026-08-03 | Add TLS support for managed Redis, fixing a production Redis outage (D-067) |
 | `539cbb7` | 2026-08-02 | Audit and finalize POS module: Workshop clicks, garment-tag print, role-aware nav (D-066) |
