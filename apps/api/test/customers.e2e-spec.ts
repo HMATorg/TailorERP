@@ -71,6 +71,10 @@ describe('Customers (e2e)', () => {
     // — that's what a client checks for, not just their truthiness.
     expect('vatNumber' in res.body.user.organization).toBe(true);
     expect('taxId' in res.body.user.organization).toBe(true);
+    // Carried the same way for the receipt fields added in D-069.
+    expect('crNumber' in res.body.user.organization).toBe(true);
+    expect('licenseNumber' in res.body.user.organization).toBe(true);
+    expect('logoUrl' in res.body.user.organization).toBe(true);
   });
 
   it('lets the counter register a walk-in with no admin involvement (D-046)', async () => {
@@ -83,6 +87,30 @@ describe('Customers (e2e)', () => {
     createdCustomerIds.push(res.body.id);
     expect(res.body.fullName).toBe('Walk-in Test Customer');
     expect(res.body.phone).toBe(phone);
+  });
+
+  it('round-trips a business customer’s VAT number and address (D-069)', async () => {
+    const phone = `+9665${(Date.now() + 30).toString().slice(-8)}`;
+    const created = await request(app.getHttpServer())
+      .post('/api/v1/customers')
+      .set({ Authorization: `Bearer ${cashierToken}`, 'X-Store-Id': storeId })
+      .send({
+        fullName: 'B2B Customer',
+        phone,
+        vatNumber: '310123456700003',
+        address: 'Al Andalus District, Jeddah',
+      })
+      .expect(201);
+    createdCustomerIds.push(created.body.id);
+    expect(created.body.vatNumber).toBe('310123456700003');
+    expect(created.body.address).toBe('Al Andalus District, Jeddah');
+
+    const fetched = await request(app.getHttpServer())
+      .get(`/api/v1/customers/${created.body.id}`)
+      .set({ Authorization: `Bearer ${cashierToken}`, 'X-Store-Id': storeId })
+      .expect(200);
+    expect(fetched.body.vatNumber).toBe('310123456700003');
+    expect(fetched.body.address).toBe('Al Andalus District, Jeddah');
   });
 
   it('lets the counter take that new customer’s first measurement (D-046)', async () => {

@@ -85,6 +85,12 @@ export default function NewCustomerModal({
         <Form.Item name="email" label="Email (optional)" rules={[{ type: 'email' }]}>
           <Input size="large" placeholder="name@example.com" />
         </Form.Item>
+        <Form.Item name="vatNumber" label="VAT number (optional — for a business customer)">
+          <Input size="large" placeholder="300012345600003" />
+        </Form.Item>
+        <Form.Item name="address" label="Address (optional)">
+          <Input.TextArea rows={2} placeholder="Street, district, city" />
+        </Form.Item>
         <Form.Item name="language" label="Preferred language">
           <Select
             size="large"

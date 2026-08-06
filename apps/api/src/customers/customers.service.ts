@@ -111,6 +111,8 @@ export class CustomersService {
         whatsappConsent: dto.whatsappConsent ?? false,
         whatsappPhone: dto.whatsappPhone ?? (dto.whatsappConsent ? dto.phone : undefined),
         language: dto.language ?? 'en',
+        vatNumber: dto.vatNumber,
+        address: dto.address,
         notes: dto.notes,
         preferredStoreId: storeId,
       },
@@ -155,6 +157,8 @@ export class CustomersService {
         ...(dto.whatsappConsent !== undefined && { whatsappConsent: dto.whatsappConsent }),
         ...(dto.whatsappPhone !== undefined && { whatsappPhone: dto.whatsappPhone }),
         ...(dto.language !== undefined && { language: dto.language }),
+        ...(dto.vatNumber !== undefined && { vatNumber: dto.vatNumber }),
+        ...(dto.address !== undefined && { address: dto.address }),
         ...(dto.notes !== undefined && { notes: dto.notes }),
       },
     });

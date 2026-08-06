@@ -6,7 +6,7 @@
 > the repo — why something is blocked, what a trap looks like — belongs in the
 > auto-memory directory, not here.
 
-**Parent** `7d3fe1c` on `main` · **generated** 2026-08-02 22:48Z · staged into the commit being created on top of it
+**Parent** `0a04164` on `main` · **generated** 2026-08-06 09:57Z · staged into the commit being created on top of it
 
 _History below runs to the parent; the commit carrying this file is its child._
 
@@ -51,14 +51,14 @@ graph LR
 | App | Package | Dev port | TS/TSX files | Direct deps |
 | --- | --- | --- | --- | --- |
 | `apps/admin` | `@tailonix/admin` | 5173 | 34 | 12 |
-| `apps/api` | `@tailonix/api` | 3000 | 148 | 24 |
+| `apps/api` | `@tailonix/api` | 3000 | 154 | 24 |
 | `apps/platform-admin` | `@tailonix/platform-admin` | 5175 | 15 | 9 |
 | `apps/pos` | `@tailonix/pos` | 5176 | 20 | 14 |
 | `apps/pwa` | `@tailonix/pwa` | 5174 | 15 | 10 |
 
 ## API modules
 
-25 feature modules, all wired into `AppModule`.
+26 feature modules, all wired into `AppModule`.
 
 | Module | Path | Depends on |
 | --- | --- | --- |
@@ -78,6 +78,7 @@ graph LR
 | `MeasurementsModule` | `apps/api/src/measurements/measurements.module.ts` | — |
 | `NotificationsModule` | `apps/api/src/notifications/notifications.module.ts` | `InvoicesModule`, `FeatureGateModule` |
 | `OrdersModule` | `apps/api/src/orders/orders.module.ts` | `InventoryModule`, `NotificationsModule` |
+| `OrganizationModule` | `apps/api/src/organization/organization.module.ts` | — |
 | `PlatformModule` | `apps/api/src/platform/platform.module.ts` | `AuthModule`, `FeatureGateModule` |
 | `PosModule` | `apps/api/src/pos/pos.module.ts` | `InventoryModule`, `InvoicesModule`, `WorkshopModule`, `OrdersModule` |
 | `PrismaModule` | `apps/api/src/prisma/prisma.module.ts` | — |
@@ -90,7 +91,7 @@ graph LR
 
 ## Data model
 
-36 models, 28 enums, 14 migrations.
+36 models, 28 enums, 15 migrations.
 
 <details><summary>Models</summary>
 
@@ -114,10 +115,11 @@ graph LR
 | 12 | `20260729183118_add_zatca_api_secret` |
 | 13 | `20260729184725_add_zatca_onboarding_stage` |
 | 14 | `20260803000000_split_length_sleeve_trouser_pallas` |
+| 15 | `20260804000000_add_org_cr_license_customer_vat_address` |
 
 ## Engineering decisions
 
-68 recorded in `docs/ENGINEERING-DECISIONS.md`. "Cited by" counts source
+69 recorded in `docs/ENGINEERING-DECISIONS.md`. "Cited by" counts source
 files that reference the decision in a comment — an uncited decision is not wrong,
 but it is the first place to look when something has quietly been undone.
 
@@ -180,7 +182,7 @@ but it is the first place to look when something has quietly been undone.
 | `D-055` | Five more Thobe measurement points, a cut-style/cufflink spec, and an urgent flag — read off a real tailor shop's own paper order form | 8 file(s) |
 | `D-056` | The measurement diagram moved every hotspot off the garment into labelled columns | — |
 | `D-057` | ZATCA Phase 2 — real XAdES signing, CSR generation, and the Reporting/Clearance client | 12 file(s) |
-| `D-058` | ZATCA onboarding orchestration — three explicit steps, a permission that didn't exist, and one deliberate non-feature | 9 file(s) |
+| `D-058` | ZATCA onboarding orchestration — three explicit steps, a permission that didn't exist, and one deliberate non-feature | 10 file(s) |
 | `D-059` | A real ZATCA primary source arrived — corrects the CSR structure, the wire shapes, and renewal | 4 file(s) |
 | `D-060` | Platform Admin finalized — three real bugs, three missing features, and the module's first tests | 23 file(s) |
 | `D-061` | First real deploy attempt exposed five gaps a dev-only setup never surfaces | 1 file(s) |
@@ -191,12 +193,13 @@ but it is the first place to look when something has quietly been undone.
 | `D-066` | POS audit — Workshop cards didn't open, garment tags didn't print, every role saw every screen | 2 file(s) |
 | `D-067` | Production Redis was never actually reachable — silently, since the first deploy | — |
 | `D-068` | M1/M3 split into front/back and left/right, plus an open-ended trouser palla list | 11 file(s) |
+| `D-069` | A competitor's receipt showed what ours was missing — CR/license number, a logo, buyer VAT | 13 file(s) |
 
 ## Tests
 
 | Suite | Files | Declared cases |
 | --- | --- | --- |
-| unit | 25 | 278 |
+| unit | 26 | 287 |
 | e2e | 0 | 0 |
 
 Counts are parsed from `it(` / `test(` call sites, so they include any case that is
@@ -206,6 +209,7 @@ currently skipped. They are a shape check, not a substitute for running the suit
 
 | Commit | Date | Subject |
 | --- | --- | --- |
+| `0a04164` | 2026-08-03 | Split M1/M3 measurements into front/back and left/right, add trouser palla list (D-068) |
 | `7d3fe1c` | 2026-08-03 | Add TLS support for managed Redis, fixing a production Redis outage (D-067) |
 | `539cbb7` | 2026-08-02 | Audit and finalize POS module: Workshop clicks, garment-tag print, role-aware nav (D-066) |
 | `86afe0d` | 2026-08-02 | Provision the chart of accounts at tenant creation, not on first Ledger visit (D-065) |

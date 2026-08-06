@@ -1760,3 +1760,54 @@ as filed when it was not.
   POS Counter's new inputs and diagram hotspots, the palla add/remove list for Trousers, Workshop's
   palla display, Admin's drawer, and the PWA's customer view all checked against a real re-measured
   customer, not just green tests.
+
+## D-069: A competitor's receipt showed what ours was missing — CR/license number, a logo, buyer VAT
+
+- **Trigger:** the user sent a photo of a competitor tailor shop's printed thermal tax invoice and
+  asked for three things: a VAT ID and address field at customer onboarding, the shop's CR
+  (commercial registration) and license numbers on the printed receipt/invoice the way the
+  competitor's sample showed them, and an admin-uploadable shop logo appearing on both documents.
+- **`Organization.vatNumber`/`taxId`/`logoUrl` already existed in the schema but had no write path
+  at all** — `vatNumber` was seed-data only, and `logoUrl` had never been read from or written to
+  anywhere in the codebase despite `StorageService`'s own docstring naming logos as one of the
+  three things object storage was provisioned for. There was no `/organization` route, no Settings
+  UI for it, nothing. Added `crNumber` and `licenseNumber` alongside them (plain `VARCHAR`, not
+  ZATCA XML/QR fields — display-only, same as `taxId` already was) and `Customer.vatNumber`/
+  `address` for the buyer side of a B2B sale. Straightforward additive migration, no backfill:
+  every new column is nullable.
+- **The logo is stored as a data URI directly in `logoUrl`, not an S3 key.** `StorageService`
+  objects are private behind 1-hour presigned URLs — fine for a PDF a customer downloads once, but
+  wrong for something rendered in an `<img src>` on a POS tablet that might stay open a full shift,
+  or re-decoded into a PDFKit buffer on every invoice. A logo is small (capped at ~365KB raw via a
+  500,000-character data-URI limit on `UpdateOrganizationDto.logoUrl`) and doesn't need S3's
+  expiry/access-control machinery at all — a plain string column already existed for it, so this is
+  the amount of infrastructure the feature actually needs, not more. `main.ts` needed
+  `app.useBodyParser('json', { limit: '2mb' })` — the express default (100kb) would have rejected
+  the payload outright.
+- **New `OrganizationController`/`Service` module**, gated by the existing `manage_organization`
+  permission (hq_admin only) — the same gate D-058 already put on ZATCA onboarding, reused rather
+  than inventing a second "org settings" permission for what is, from an authorization standpoint,
+  the same bucket. `logoUrl: null` is a deliberate, distinct case from omitting the field —
+  `@ValidateIf((o) => o.logoUrl !== null)` skips the data-URI format check specifically for that
+  value, so "remove the logo" round-trips through the same PUT instead of needing a second endpoint.
+  The audit log never records the logo payload itself, only whether it changed (`'(set)'`/`null`) —
+  a few hundred KB of base64 has no value as an audit trail and no reason to bloat one.
+- **The A4 PDF header was already a hand-tuned coordinate layout** (`invoice-pdf.service.ts`,
+  fixed-point Y positions threading through `header()`/`parties()`/`lineItems()`/`totals()`).
+  Adding a logo meant reserving space at the top without hand-editing every downstream constant.
+  Solved by having `header()` compute a single `shift` (34pt when a logo is present, 0 otherwise)
+  and threading it through as a parameter everywhere those original constants were fixed numbers —
+  the arithmetic collapses to the exact original values when `shift` is 0, which is why all 12
+  pre-existing PDF tests passed unchanged after the refactor. `parties()` similarly now returns the
+  y-cursor `lineItems()` starts from (previously a fixed `218`), because a buyer's optional VAT
+  number and address rows can push the "Bill to" block taller than before.
+- **Verification:** new `organization.service.spec.ts` (6 cases, including the audit-redaction one
+  above) and `organization.e2e-spec.ts` (permission gate, GET/PUT round-trip, logo clear via
+  `null`, rejection of a non-image `logoUrl`); `invoice-pdf.service.spec.ts` extended with a real
+  1×1 PNG buffer to prove the logo actually embeds (not just that a Buffer was passed) and that a
+  corrupt logo buffer degrades to a missing logo rather than failing the whole invoice; customer
+  VAT/address round-tripped in `customers.e2e-spec.ts`. Full regression: 294 unit / e2e passing,
+  all four frontend builds, `node tools/memory-graph.mjs --check` clean. Live-verified in the
+  browser: Admin's new Business Profile card (upload → preview → save → reload confirms
+  persistence), a checked-out thermal receipt showing the logo/CR/license/buyer VAT, and a
+  downloaded A4 PDF with the shifted header.

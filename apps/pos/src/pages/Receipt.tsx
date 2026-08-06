@@ -47,6 +47,8 @@ export default function Receipt() {
   const printData: PrintCenterData = {
     orderNumber: state.orderNumber,
     customerName: state.customerName,
+    customerVatNumber: state.customerVatNumber,
+    customerAddress: state.customerAddress,
     dueDate: state.dueDate,
     totalAmount: state.totalAmount,
     paidAmount: state.paidAmount,

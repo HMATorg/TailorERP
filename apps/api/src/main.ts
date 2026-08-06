@@ -1,12 +1,17 @@
 import 'reflect-metadata';
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { seedPlatformAdminIfConfigured } from './bootstrap/seed-platform-admin';
 
 async function bootstrap() {
   // rawBody is required for WhatsApp/Stripe webhook signature verification
-  const app = await NestFactory.create(AppModule, { rawBody: true });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
+
+  // Default express json limit (100kb) is too small for a logo data URI
+  // (organization.logoUrl, D-069) — everything else the API accepts is small.
+  app.useBodyParser('json', { limit: '2mb' });
 
   app.setGlobalPrefix('api/v1');
   app.useGlobalPipes(

@@ -29,6 +29,9 @@ export interface OrganizationSummary {
   name: string;
   vatNumber: string | null;
   taxId: string | null;
+  crNumber: string | null;
+  licenseNumber: string | null;
+  logoUrl: string | null;
 }
 
 interface AuthState {

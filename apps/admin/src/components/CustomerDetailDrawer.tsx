@@ -9,6 +9,8 @@ interface CustomerDetail {
   fullName: string;
   phone: string;
   email: string | null;
+  vatNumber: string | null;
+  address: string | null;
   language: string;
   whatsappConsent: boolean;
   lifetimeOrderCount: number;
@@ -120,6 +122,8 @@ export default function CustomerDetailDrawer({
           <Descriptions column={1} size="small" bordered>
             <Descriptions.Item label="Phone">{detail.phone}</Descriptions.Item>
             <Descriptions.Item label="Email">{detail.email ?? '—'}</Descriptions.Item>
+            {detail.vatNumber && <Descriptions.Item label="VAT number">{detail.vatNumber}</Descriptions.Item>}
+            {detail.address && <Descriptions.Item label="Address">{detail.address}</Descriptions.Item>}
             <Descriptions.Item label="Language">{detail.language}</Descriptions.Item>
             <Descriptions.Item label="WhatsApp">
               {detail.whatsappConsent ? <Tag color="green">opted in</Tag> : <Tag>—</Tag>}

@@ -414,6 +414,8 @@ export class PosService {
       id: order.id,
       orderNumber: order.orderNumber,
       customerName: customer.fullName,
+      customerVatNumber: customer.vatNumber,
+      customerAddress: customer.address,
       dueDate: order.dueDate,
       isUrgent: order.isUrgent,
       totalAmount: order.totalAmount.toFixed(2),

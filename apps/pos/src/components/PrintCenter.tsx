@@ -25,6 +25,8 @@ export interface PrintCenterInvoice {
 export interface PrintCenterData {
   orderNumber: string;
   customerName: string;
+  customerVatNumber?: string | null;
+  customerAddress?: string | null;
   dueDate?: string | null;
   totalAmount: string;
   paidAmount: string;
@@ -121,9 +123,16 @@ export default function PrintCenter({ data }: { data: PrintCenterData }) {
 
       {/* ---- Thermal receipt (80mm) — shown only while body.printing-thermal ---- */}
       <div className="print-only thermal-receipt">
+        {organization?.logoUrl && (
+          <div className="center">
+            <img src={organization.logoUrl} alt="" style={{ maxWidth: 120, maxHeight: 60 }} />
+          </div>
+        )}
         <div className="center bold">{organization?.name ?? 'Tailonix'}</div>
         {store && <div className="center small">{store.name}</div>}
         {organization?.vatNumber && <div className="center small">VAT {organization.vatNumber}</div>}
+        {organization?.crNumber && <div className="center small">CR {organization.crNumber}</div>}
+        {organization?.licenseNumber && <div className="center small">License {organization.licenseNumber}</div>}
         <div className="rule" />
         <div className="row small">
           <span>Order</span>
@@ -139,6 +148,18 @@ export default function PrintCenter({ data }: { data: PrintCenterData }) {
             <span>{data.invoice.invoiceNumber}</span>
           </div>
         )}
+        <div className="rule" />
+        <div className="row small">
+          <span>Customer</span>
+          <span className="bold">{data.customerName}</span>
+        </div>
+        {data.customerVatNumber && (
+          <div className="row small">
+            <span>Customer VAT</span>
+            <span>{data.customerVatNumber}</span>
+          </div>
+        )}
+        {data.customerAddress && <div className="small">Address: {data.customerAddress}</div>}
         <div className="rule" />
         {data.lines.map((l, i) => (
           <div className="row small" key={i}>

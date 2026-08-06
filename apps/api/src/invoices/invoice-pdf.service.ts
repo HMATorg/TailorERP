@@ -17,11 +17,19 @@ export interface InvoiceData {
   organizationName: string;
   organizationVatNumber?: string | null;
   organizationTaxId?: string | null;
+  /** Commercial Registration and municipal license numbers — display only, not a ZATCA field (D-069). */
+  organizationCrNumber?: string | null;
+  organizationLicenseNumber?: string | null;
+  /** Decoded image bytes, not the data URI — see invoices.service.ts (D-069). */
+  organizationLogo?: Buffer | null;
   storeName: string;
   storeAddress?: string | null;
   storePhone?: string | null;
   customerName: string;
   customerPhone: string;
+  /** The buyer's own VAT number and address, for a B2B sale (D-069). */
+  customerVatNumber?: string | null;
+  customerAddress?: string | null;
   orderNumber: string;
   currency: string;
   lines: InvoiceLine[];
@@ -90,9 +98,9 @@ export class InvoicePdfService implements OnModuleInit {
 
     const qr = await this.renderQr(data.qrCodeBase64);
 
-    this.header(doc, data);
-    this.parties(doc, data);
-    const afterItems = this.lineItems(doc, data);
+    const shift = this.header(doc, data);
+    const afterParties = this.parties(doc, data, shift);
+    const afterItems = this.lineItems(doc, data, afterParties);
     const afterTotals = this.totals(doc, data, money, afterItems);
     this.footer(doc, qr, afterTotals);
 
@@ -133,20 +141,45 @@ export class InvoicePdfService implements OnModuleInit {
     doc.font(AR).fontSize(size - 2).fillColor(LIGHT).text(en, x, y + size + 1, { width, align: 'right' });
   }
 
-  private header(doc: PDFKit.PDFDocument, data: InvoiceData): void {
+  /**
+   * Draws the seller/document header and returns how far everything below it
+   * must shift down — 0 normally, or enough to clear a logo drawn in the
+   * top-left corner (D-069). Every other private method takes that offset
+   * rather than re-deriving it, so there is exactly one place that decides
+   * whether a logo is present.
+   */
+  private header(doc: PDFKit.PDFDocument, data: InvoiceData): number {
+    const shift = data.organizationLogo ? 34 : 0;
+    if (data.organizationLogo) {
+      try {
+        doc.image(data.organizationLogo, LEFT, 14, { fit: [55, 30] });
+      } catch {
+        // A corrupt/unsupported logo must not cost the invoice — the shifted
+        // layout still has the (now empty) space reserved for it.
+      }
+    }
+
     // Seller block on the right — the reading origin in an RTL document.
     doc
       .font(AR_BOLD)
       .fontSize(20)
       .fillColor(TEAL)
-      .text(data.organizationName, 280, 50, { width: RIGHT - 280, align: 'right' });
+      .text(data.organizationName, 280, 50 + shift, { width: RIGHT - 280, align: 'right' });
 
-    let y = 78;
+    let y = 78 + shift;
     doc.font(AR).fontSize(9).fillColor(GREY);
     const vat = data.organizationVatNumber ?? data.organizationTaxId;
     if (vat) {
       // The seller's VAT registration number is mandatory on a tax invoice.
       doc.text(`الرقم الضريبي ${vat}`, 280, y, { width: RIGHT - 280, align: 'right' });
+      y += 13;
+    }
+    if (data.organizationCrNumber) {
+      doc.text(`رقم السجل التجاري ${data.organizationCrNumber}`, 280, y, { width: RIGHT - 280, align: 'right' });
+      y += 13;
+    }
+    if (data.organizationLicenseNumber) {
+      doc.text(`رقم الرخصة ${data.organizationLicenseNumber}`, 280, y, { width: RIGHT - 280, align: 'right' });
       y += 13;
     }
     for (const l of [data.storeName, data.storeAddress, data.storePhone]) {
@@ -160,7 +193,7 @@ export class InvoicePdfService implements OnModuleInit {
       .font(AR_BOLD)
       .fontSize(15)
       .fillColor(CHARCOAL)
-      .text(data.simplified === false ? 'فاتورة ضريبية' : 'فاتورة ضريبية مبسطة', LEFT, 50, {
+      .text(data.simplified === false ? 'فاتورة ضريبية' : 'فاتورة ضريبية مبسطة', LEFT, 50 + shift, {
         width: 210,
         align: 'left',
       });
@@ -168,41 +201,58 @@ export class InvoicePdfService implements OnModuleInit {
       .font(AR)
       .fontSize(8)
       .fillColor(LIGHT)
-      .text(data.simplified === false ? 'Tax Invoice' : 'Simplified Tax Invoice', LEFT, 70, {
+      .text(data.simplified === false ? 'Tax Invoice' : 'Simplified Tax Invoice', LEFT, 70 + shift, {
         width: 210,
         align: 'left',
       });
 
     doc.font(AR).fontSize(10).fillColor(GREY);
-    doc.text(data.invoiceNumber, LEFT, 88, { width: 210, align: 'left' });
-    doc.text(data.issuedAt.toISOString().slice(0, 10), LEFT, 102, { width: 210, align: 'left' });
+    doc.text(data.invoiceNumber, LEFT, 88 + shift, { width: 210, align: 'left' });
+    doc.text(data.issuedAt.toISOString().slice(0, 10), LEFT, 102 + shift, { width: 210, align: 'left' });
+
+    return shift;
   }
 
-  private parties(doc: PDFKit.PDFDocument, data: InvoiceData): void {
-    doc.moveTo(LEFT, 132).lineTo(RIGHT, 132).strokeColor(RULE).stroke();
+  /** Returns the y cursor below the parties block, so the line-item table knows where to start. */
+  private parties(doc: PDFKit.PDFDocument, data: InvoiceData, shift: number): number {
+    const top = 132 + shift;
+    doc.moveTo(LEFT, top).lineTo(RIGHT, top).strokeColor(RULE).stroke();
 
-    this.label(doc, 'فاتورة إلى', 'Bill to', 300, 145, RIGHT - 300);
+    this.label(doc, 'فاتورة إلى', 'Bill to', 300, top + 13, RIGHT - 300);
     doc
       .font(AR_BOLD)
       .fontSize(12)
       .fillColor(CHARCOAL)
-      .text(data.customerName, 300, 168, { width: RIGHT - 300, align: 'right' });
+      .text(data.customerName, 300, top + 36, { width: RIGHT - 300, align: 'right' });
     doc
       .font(AR)
       .fontSize(10)
       .fillColor(GREY)
-      .text(data.customerPhone, 300, 185, { width: RIGHT - 300, align: 'right' });
+      .text(data.customerPhone, 300, top + 53, { width: RIGHT - 300, align: 'right' });
 
-    this.label(doc, 'رقم الطلب', 'Order no.', LEFT, 145, 200);
+    let rightY = top + 53;
+    if (data.customerVatNumber) {
+      rightY += 15;
+      doc.text(`الرقم الضريبي ${data.customerVatNumber}`, 300, rightY, { width: RIGHT - 300, align: 'right' });
+    }
+    if (data.customerAddress) {
+      rightY += 15;
+      doc.text(data.customerAddress, 300, rightY, { width: RIGHT - 300, align: 'right' });
+    }
+
+    this.label(doc, 'رقم الطلب', 'Order no.', LEFT, top + 13, 200);
     doc
       .font(AR)
       .fontSize(11)
       .fillColor(CHARCOAL)
-      .text(data.orderNumber, LEFT, 168, { width: 200, align: 'left' });
+      .text(data.orderNumber, LEFT, top + 36, { width: 200, align: 'left' });
+    const leftY = top + 36 + 11;
+
+    return Math.max(rightY + 20, leftY + 20, top + 86);
   }
 
   /** RTL table: item on the right, amount on the left. Returns the y cursor. */
-  private lineItems(doc: PDFKit.PDFDocument, data: InvoiceData): number {
+  private lineItems(doc: PDFKit.PDFDocument, data: InvoiceData, startY: number): number {
     const COL = {
       amount: { x: LEFT, w: 100 },
       unit: { x: 160, w: 80 },
@@ -210,7 +260,7 @@ export class InvoicePdfService implements OnModuleInit {
       item: { x: 300, w: RIGHT - 300 },
     };
 
-    let y = 218;
+    let y = startY;
     doc.rect(LEFT, y - 6, RIGHT - LEFT, 30).fill('#F5F5F5');
     this.label(doc, 'البند', 'Item', COL.item.x, y, COL.item.w, 9);
     this.label(doc, 'الكمية', 'Qty', COL.qty.x, y, COL.qty.w, 9);

@@ -183,4 +183,45 @@ describe('InvoicePdfService', () => {
     expect(pdf.subarray(0, 5).toString()).toBe('%PDF-');
     expect((await readPdf(pdf)).text).not.toContain('الرقم الضريبي');
   });
+
+  it('prints the seller CR/license numbers and the buyer VAT number/address (D-069)', async () => {
+    const { text } = await readPdf(
+      await service.generate({
+        ...baseData,
+        organizationCrNumber: '1010101010',
+        organizationLicenseNumber: '700123456',
+        customerVatNumber: '310123456700003',
+        customerAddress: 'Al Andalus District, Jeddah',
+      }),
+    );
+    expect(text).toContain('1010101010');
+    expect(text).toContain('700123456');
+    expect(text).toContain('310123456700003');
+    expect(text).toContain('Jeddah');
+  });
+
+  it('embeds a seller logo when one is set, and shifts the header down to make room', async () => {
+    // A minimal valid 1x1 PNG — real bytes, not a stand-in, so this exercises
+    // PDFKit's actual image embedding rather than just the presence check.
+    const logo = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+      'base64',
+    );
+    const withLogo = await service.generate({ ...baseData, organizationLogo: logo });
+    const withoutLogo = await service.generate({ ...baseData, organizationLogo: null });
+
+    // More embedded image objects than without a logo — PDFKit may emit an
+    // extra XObject for a PNG's alpha channel (SMask), so this checks "at
+    // least one more", not an exact count.
+    const countImages = (pdf: Buffer) => (pdf.toString('latin1').match(/\/Subtype\s*\/Image/g) ?? []).length;
+    expect(countImages(withLogo)).toBeGreaterThan(countImages(withoutLogo));
+
+    // The shift must not push a normal invoice onto a second page.
+    expect((await readPdf(withLogo)).pages).toBe(1);
+  });
+
+  it('does not let a broken logo buffer break invoice generation', async () => {
+    const pdf = await service.generate({ ...baseData, organizationLogo: Buffer.from('not a real image') });
+    expect(pdf.subarray(0, 5).toString()).toBe('%PDF-');
+  });
 });

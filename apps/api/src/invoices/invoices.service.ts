@@ -27,12 +27,32 @@ type InvoiceRow = {
 
 const ORDER_INCLUDE = {
   organization: {
-    select: { name: true, taxId: true, vatNumber: true, defaultCurrency: true },
+    select: {
+      name: true,
+      taxId: true,
+      vatNumber: true,
+      crNumber: true,
+      licenseNumber: true,
+      logoUrl: true,
+      defaultCurrency: true,
+    },
   },
   store: { select: { name: true, address: true, phone: true } },
-  customer: { select: { fullName: true, phone: true } },
+  customer: { select: { fullName: true, phone: true, vatNumber: true, address: true } },
   items: true,
 } satisfies Prisma.OrderInclude;
+
+/** `organization.logoUrl` is a `data:image/...;base64,...` URI — PDFKit needs raw bytes. */
+function decodeLogoDataUri(uri: string | null): Buffer | null {
+  if (!uri) return null;
+  const match = /^data:image\/[a-zA-Z+]+;base64,(.+)$/.exec(uri);
+  if (!match) return null;
+  try {
+    return Buffer.from(match[1], 'base64');
+  } catch {
+    return null;
+  }
+}
 
 type OrderWithRelations = Prisma.OrderGetPayload<{ include: typeof ORDER_INCLUDE }>;
 
@@ -89,11 +109,16 @@ export class InvoicesService {
       organizationName: order.organization.name,
       organizationVatNumber: order.organization.vatNumber,
       organizationTaxId: order.organization.taxId,
+      organizationCrNumber: order.organization.crNumber,
+      organizationLicenseNumber: order.organization.licenseNumber,
+      organizationLogo: decodeLogoDataUri(order.organization.logoUrl),
       storeName: order.store.name,
       storeAddress: order.store.address,
       storePhone: order.store.phone,
       customerName: order.customer.fullName,
       customerPhone: order.customer.phone,
+      customerVatNumber: order.customer.vatNumber,
+      customerAddress: order.customer.address,
       orderNumber: order.orderNumber,
       currency: order.organization.defaultCurrency,
       lines: order.items.map((i) => ({

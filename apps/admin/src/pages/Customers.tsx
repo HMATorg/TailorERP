@@ -117,6 +117,12 @@ export default function Customers() {
           <Form.Item name="email" label="Email" rules={[{ type: 'email' }]}>
             <Input />
           </Form.Item>
+          <Form.Item name="vatNumber" label="VAT number (optional — for a business customer)">
+            <Input placeholder="300012345600003" />
+          </Form.Item>
+          <Form.Item name="address" label="Address (optional)">
+            <Input.TextArea rows={2} placeholder="Street, district, city" />
+          </Form.Item>
           <Form.Item name="language" label="Preferred language">
             <Select
               options={[

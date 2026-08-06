@@ -15,7 +15,18 @@ import { TokenService } from './token.service';
 import type { AuthTokens } from './auth.types';
 
 const STAFF_SESSION_USER_INCLUDE = {
-  organization: { select: { id: true, name: true, status: true, vatNumber: true, taxId: true } },
+  organization: {
+    select: {
+      id: true,
+      name: true,
+      status: true,
+      vatNumber: true,
+      taxId: true,
+      crNumber: true,
+      licenseNumber: true,
+      logoUrl: true,
+    },
+  },
   storeRoles: {
     where: { isActive: true },
     include: { store: { select: { id: true, name: true, status: true } } },
@@ -76,6 +87,11 @@ export class AuthService {
           // the same number InvoicePdfService already prints on the A4 invoice.
           vatNumber: user.organization!.vatNumber,
           taxId: user.organization!.taxId,
+          // Same reasoning, for the CR/license numbers and logo a thermal
+          // receipt now prints (D-069).
+          crNumber: user.organization!.crNumber,
+          licenseNumber: user.organization!.licenseNumber,
+          logoUrl: user.organization!.logoUrl,
         },
         storeRoles: user.storeRoles.map((r) => ({ storeId: r.storeId, role: r.role })),
       },

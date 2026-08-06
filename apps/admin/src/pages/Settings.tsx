@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { SafetyCertificateOutlined } from '@ant-design/icons';
+import { SafetyCertificateOutlined, ShopOutlined, UploadOutlined } from '@ant-design/icons';
 import {
   Alert,
   Button,
@@ -13,10 +13,137 @@ import {
   Steps,
   Tag,
   Typography,
+  Upload,
   message,
 } from 'antd';
 import { api, errMsg } from '../api/client';
 import { useAuthStore } from '../stores/auth';
+
+interface OrganizationProfile {
+  name: string;
+  vatNumber: string | null;
+  crNumber: string | null;
+  licenseNumber: string | null;
+  logoUrl: string | null;
+}
+
+/** Keeps the login response and the localStorage-persisted auth store small. */
+const MAX_LOGO_BYTES = 300 * 1024;
+
+/**
+ * Name, VAT/CR/license numbers, and logo — printed on every thermal receipt
+ * and A4 tax invoice (D-069). Separate `Card` from the ZATCA onboarding below:
+ * this is plain display data an owner edits directly, no CSID or OTP involved.
+ */
+function BusinessProfileCard() {
+  const [form] = Form.useForm<{ name: string; vatNumber?: string; crNumber?: string; licenseNumber?: string }>();
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [logoDataUri, setLogoDataUri] = useState<string | null>(null);
+  const [savedLogoDataUri, setSavedLogoDataUri] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data } = await api.get<OrganizationProfile>('/organization');
+      form.setFieldsValue({
+        name: data.name,
+        vatNumber: data.vatNumber ?? undefined,
+        crNumber: data.crNumber ?? undefined,
+        licenseNumber: data.licenseNumber ?? undefined,
+      });
+      setLogoDataUri(data.logoUrl);
+      setSavedLogoDataUri(data.logoUrl);
+    } catch (e) {
+      message.error(errMsg(e));
+    } finally {
+      setLoading(false);
+    }
+  }, [form]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const pickLogo = (file: File): boolean => {
+    if (file.size > MAX_LOGO_BYTES) {
+      message.error(`Logo must be under ${Math.round(MAX_LOGO_BYTES / 1024)}KB`);
+      return false;
+    }
+    const reader = new FileReader();
+    reader.onload = () => setLogoDataUri(reader.result as string);
+    reader.onerror = () => message.error('Could not read that file');
+    reader.readAsDataURL(file);
+    return false; // handled entirely client-side — no auto-upload to any endpoint
+  };
+
+  const save = async (v: { name: string; vatNumber?: string; crNumber?: string; licenseNumber?: string }) => {
+    setSaving(true);
+    try {
+      await api.put('/organization', {
+        ...v,
+        // Only sent when the logo actually changed — a null clears it, an
+        // unchanged image is never re-uploaded on every unrelated save.
+        ...(logoDataUri !== savedLogoDataUri ? { logoUrl: logoDataUri } : {}),
+      });
+      message.success('Business profile saved');
+      await load();
+    } catch (e) {
+      message.error(errMsg(e));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card loading={loading} style={{ marginBlockEnd: 16 }}>
+      <Typography.Title level={5} style={{ marginBlockStart: 0 }}>
+        <ShopOutlined /> Business Profile
+      </Typography.Title>
+      <Typography.Paragraph type="secondary">
+        Printed on every thermal receipt and A4 tax invoice — name, VAT/CR/license numbers, and logo.
+      </Typography.Paragraph>
+      <Form form={form} layout="vertical" onFinish={save}>
+        <Form.Item name="name" label="Business name" rules={[{ required: true }]}>
+          <Input placeholder="Al Anwar Tailors" />
+        </Form.Item>
+        <Form.Item name="vatNumber" label="VAT registration number">
+          <Input placeholder="300012345600003" />
+        </Form.Item>
+        <Form.Item name="crNumber" label="Commercial Registration (CR) number">
+          <Input />
+        </Form.Item>
+        <Form.Item name="licenseNumber" label="License number">
+          <Input />
+        </Form.Item>
+        <Form.Item label="Logo">
+          <Space align="start">
+            {logoDataUri && (
+              <img
+                src={logoDataUri}
+                alt="Business logo"
+                style={{ maxWidth: 120, maxHeight: 80, border: '1px solid #E0E0E0', borderRadius: 4, padding: 4 }}
+              />
+            )}
+            <Space direction="vertical">
+              <Upload accept="image/png,image/jpeg,image/webp" showUploadList={false} beforeUpload={pickLogo}>
+                <Button icon={<UploadOutlined />}>{logoDataUri ? 'Replace logo' : 'Upload logo'}</Button>
+              </Upload>
+              {logoDataUri && (
+                <Button size="small" danger type="text" onClick={() => setLogoDataUri(null)}>
+                  Remove logo
+                </Button>
+              )}
+            </Space>
+          </Space>
+        </Form.Item>
+        <Button type="primary" htmlType="submit" loading={saving}>
+          Save business profile
+        </Button>
+      </Form>
+    </Card>
+  );
+}
 
 type OnboardingStage = 'not_started' | 'compliance' | 'production';
 
@@ -147,6 +274,8 @@ export default function Settings() {
 
   return (
     <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+      <BusinessProfileCard />
+
       <Typography.Title level={4} style={{ margin: 0 }}>
         <SafetyCertificateOutlined /> Settings — ZATCA E-Invoicing
       </Typography.Title>

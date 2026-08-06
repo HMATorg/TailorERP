@@ -32,7 +32,14 @@ interface OrderDetailData {
   notes: string | null;
   isUrgent: boolean;
   createdAt: string;
-  customer: { id: string; fullName: string; phone: string; whatsappConsent: boolean };
+  customer: {
+    id: string;
+    fullName: string;
+    phone: string;
+    whatsappConsent: boolean;
+    vatNumber: string | null;
+    address: string | null;
+  };
   items: { id: string; garmentType: string; quantity: number; unitPrice: string }[];
   statusHistory: { id: string; fromStatus: string | null; toStatus: string; note: string | null; createdAt: string; changedBy: { fullName: string } | null }[];
   payments: { id: string; amount: string; method: string; kind: string; createdAt: string }[];
@@ -112,6 +119,8 @@ export default function OrderDetail() {
   const printData: PrintCenterData = {
     orderNumber: order.orderNumber,
     customerName: order.customer.fullName,
+    customerVatNumber: order.customer.vatNumber,
+    customerAddress: order.customer.address,
     dueDate: order.dueDate,
     totalAmount: money(order.totalAmount),
     paidAmount: money(order.paidAmount),

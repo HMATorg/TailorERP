@@ -225,6 +225,12 @@ model Organization {
   taxId           String?   @map("tax_id") @db.VarChar(100)
   /// 15-digit KSA VAT registration number, required on ZATCA invoices
   vatNumber       String?   @map("vat_number") @db.VarChar(20)
+  /// Commercial Registration number (رقم السجل التجاري), printed on receipts
+  /// and the A4 invoice alongside the VAT number — not a ZATCA XML/QR field,
+  /// display only (D-069)
+  crNumber        String?   @map("cr_number") @db.VarChar(50)
+  /// Municipal/business license number (رقم الرخصة), display only (D-069)
+  licenseNumber   String?   @map("license_number") @db.VarChar(50)
   /// ZATCA-issued CSID + private key for cryptographic stamping (encrypted)
   zatcaCsidEncrypted       String? @map("zatca_csid_encrypted")
   zatcaPrivateKeyEncrypted String? @map("zatca_private_key_encrypted")
@@ -383,6 +389,11 @@ model Customer {
   whatsappPhone    String?  @map("whatsapp_phone") @db.VarChar(20)
   preferredStoreId String?  @map("preferred_store_id") @db.Uuid
   language         String   @default("en") @db.VarChar(5)
+  /// The customer's own VAT registration number, for a B2B sale where the
+  /// buyer needs it on the tax invoice (D-069). Not the seller's — that's
+  /// Organization.vatNumber.
+  vatNumber        String?  @map("vat_number") @db.VarChar(20)
+  address          String?
   /// Lifetime garment count driving tier level (v4 amendment §1)
   lifetimeOrderCount Int    @default(0) @map("lifetime_order_count")
   notes            String?

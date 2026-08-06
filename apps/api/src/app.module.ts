@@ -21,6 +21,7 @@ import { HealthModule } from './health/health.module';
 import { InventoryModule } from './inventory/inventory.module';
 import { InvoicesModule } from './invoices/invoices.module';
 import { OrdersModule } from './orders/orders.module';
+import { OrganizationModule } from './organization/organization.module';
 import { StorageModule } from './storage/storage.module';
 import { StoresModule } from './stores/stores.module';
 import { TeamModule } from './team/team.module';
@@ -45,6 +46,7 @@ import { TeamModule } from './team/team.module';
     AppointmentsModule,
     CustomerModule,
     CustomersModule,
+    OrganizationModule,
     DashboardModule,
     NotificationsModule,
     PlatformModule,

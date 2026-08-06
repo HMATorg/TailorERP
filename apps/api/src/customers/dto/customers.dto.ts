@@ -41,6 +41,17 @@ export class CreateCustomerDto {
   @IsOptional()
   language?: string;
 
+  /** The customer's own VAT registration number, for a B2B sale (D-069). */
+  @IsString()
+  @MaxLength(20)
+  @IsOptional()
+  vatNumber?: string;
+
+  @IsString()
+  @MaxLength(500)
+  @IsOptional()
+  address?: string;
+
   @IsString()
   @IsOptional()
   notes?: string;

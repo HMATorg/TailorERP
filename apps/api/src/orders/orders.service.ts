@@ -236,7 +236,9 @@ export class OrdersService {
     const order = await this.prisma.order.findFirst({
       where: { id: orderId, storeId },
       include: {
-        customer: { select: { id: true, fullName: true, phone: true, whatsappConsent: true } },
+        customer: {
+          select: { id: true, fullName: true, phone: true, whatsappConsent: true, vatNumber: true, address: true },
+        },
         items: {
           include: {
             fabrics: {
